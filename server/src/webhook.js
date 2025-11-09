@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { handleBotEvent } from './max.js'
+import { handleUpdate } from './max.js'
 
 const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    await handleBotEvent(req.body)
+    await handleUpdate(req.body)
     res.json({ ok: true })
   } catch (error) {
     console.error('Webhook processing error', error)

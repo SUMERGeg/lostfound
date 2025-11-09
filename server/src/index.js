@@ -4,7 +4,7 @@ import dotenv from 'dotenv'
 import listingsRouter from './listings.js'
 import webhookRouter from './webhook.js'
 import { startMatchingScheduler } from './cron.js'
-import { startPolling } from './polling.js'
+import { startBot } from './max.js'
 
 dotenv.config()
 
@@ -34,15 +34,14 @@ startMatchingScheduler()
 app.listen(port, () => {
   console.log(`[server] Lost&Found API запущен на http://localhost:${port}`)
   console.log(`[server] CORS разрешён для: ${frontOrigin}`)
-  
+
   if (process.env.MAX_BOT_TOKEN) {
-    console.log(`[server] MAX Bot токен настроен ✓`)
-    // Запускаем Long Polling для получения событий от MAX
-    startPolling().catch(err => {
-      console.error('[server] Ошибка запуска polling:', err)
+    console.log('[server] MAX Bot токен настроен ✓')
+    startBot().catch(err => {
+      console.error('[server] Ошибка запуска бота:', err)
     })
   } else {
-    console.log(`[server] ⚠️  MAX Bot токен не настроен (добавьте MAX_BOT_TOKEN в .env)`)
+    console.log('[server] ⚠️  MAX Bot токен не настроен (добавьте MAX_BOT_TOKEN в .env)')
   }
 })
 

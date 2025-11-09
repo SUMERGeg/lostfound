@@ -1,123 +1,129 @@
 import 'dotenv/config'
+import { Bot } from '@maxhub/max-bot-api'
+import pool from './db.js'
+import {
+  buildMainMenuKeyboard,
+  handleMessage as handleFlowMessage,
+  handleCallback as handleFlowCallback
+} from './fsm.js'
 
-const MAX_API_BASE = process.env.MAX_API_BASE || 'https://platform-api.max.ru'
+const MAX_API_BASE = process.env.MAX_API_BASE
 const MAX_BOT_TOKEN = process.env.MAX_BOT_TOKEN
 
-/**
- * Отправка сообщения пользователю через MAX Bot API
- */
-export async function sendMessage(userId, text, buttons = null) {
+let botInstance = null
+
+function ensureBot() {
   if (!MAX_BOT_TOKEN) {
-    console.error('[MAX] Токен бота не настроен')
+    console.warn('[MAX] ⚠️ MAX_BOT_TOKEN не настроен — бот не будет запущен')
     return null
   }
 
-  const body = {
-    text: text
+  if (botInstance) {
+    return botInstance
   }
 
-  if (buttons) {
-    // Buttons в attachments как inline_keyboard
-    body.attachments = [{
-      type: 'inline_keyboard',
-      payload: {
-        buttons: [buttons.map(btn => ({
-          type: 'link',
-          text: btn.text,
-          url: btn.url
-        }))]
-      }
-    }]
-  }
+  const clientOptions = MAX_API_BASE ? { clientOptions: { baseUrl: MAX_API_BASE } } : undefined
+  const bot = new Bot(MAX_BOT_TOKEN, clientOptions)
 
-  try {
-    const response = await fetch(`${MAX_API_BASE}/messages?user_id=${userId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': MAX_BOT_TOKEN
-      },
-      body: JSON.stringify(body)
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      console.error('[MAX] Ошибка отправки сообщения:', error)
-      return null
+  bot.catch((error, ctx) => {
+    console.error('[MAX] Необработанная ошибка в боте:', error)
+    if (ctx?.update) {
+      console.error('[MAX] Контекст события:', JSON.stringify(ctx.update, null, 2))
     }
+  })
 
-    return await response.json()
+  void bot.api.setMyCommands([
+    {
+      name: 'start',
+      description: 'Открыть мини-приложение Lost&Found'
+    },
+    {
+      name: 'stats',
+      description: 'Показать статистику объявлений'
+    }
+  ]).catch(err => {
+    console.error('[MAX] Не удалось установить список команд:', err)
+  })
+
+  bot.on('bot_started', async ctx => {
+    await ctx.reply(
+      '👋 Добро пожаловать в Lost&Found!\n\nЗдесь вы можете найти потерянные вещи или помочь вернуть находки владельцам.',
+      {
+        attachments: [buildMainMenuKeyboard()]
+      }
+    )
+  })
+
+  bot.command('start', async ctx => {
+    await ctx.reply('Готово! Выберите действие из меню:', {
+      attachments: [buildMainMenuKeyboard()]
+    })
+  })
+
+  bot.command('stats', async ctx => {
+    const statsMessage = await buildStatsMessage()
+    await ctx.reply(statsMessage)
+  })
+
+  bot.on('message_created', async ctx => {
+    await handleFlowMessage(ctx)
+  })
+
+  bot.on('message_callback', async ctx => {
+    await handleFlowCallback(ctx)
+  })
+
+  botInstance = bot
+  return botInstance
+}
+
+async function buildStatsMessage() {
+  try {
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM listings WHERE status = "ACTIVE"')
+    if (Number(total) === 0) {
+      return '🔍 Пока нет активных объявлений. Добавьте первую находку или потерю!'
+    }
+    return `📊 Сейчас в базе ${total} активных объявлений. Загляните в мини-приложение, чтобы посмотреть подробности.`
   } catch (error) {
-    console.error('[MAX] Ошибка запроса:', error)
-    return null
+    console.error('[MAX] Не удалось получить статистику объявлений:', error)
+    return '⚠️ Не получилось получить статистику сейчас. Попробуйте чуть позже.'
   }
 }
 
-/**
- * Обработка событий от MAX Bot
- */
-export async function handleBotEvent(update) {
-  const type = update?.type ?? 'unknown'
-  console.log(`[MAX] Событие: ${type}`, update)
+export function getBot() {
+  return ensureBot()
+}
 
-  switch (type) {
-    case 'bot_started': {
-      // Новый пользователь запустил бота
-      const userId = update?.user?.id
-      if (userId) {
-        console.log('[MAX] Новый пользователь:', userId)
-        
-        // Приветствуем и отправляем кнопку для запуска мини-приложения
-        const frontUrl = process.env.FRONT_ORIGIN || 'http://localhost:5173'
-        await sendMessage(
-          userId,
-          '👋 Добро пожаловать в Lost&Found!\n\nЗдесь вы можете найти потерянные вещи или помочь вернуть находки владельцам.',
-          [{
-            text: '🗺️ Открыть карту',
-            url: frontUrl
-          }]
-        )
-      }
-      break
-    }
-
-    case 'message_created': {
-      // Получено текстовое сообщение
-      const message = update?.message
-      const userId = message?.from_id
-      const text = message?.text || ''
-
-      console.log('[MAX] Сообщение от', userId, ':', text)
-
-      // Простая обработка команд (пока без FSM)
-      if (text === '/start' || text.toLowerCase() === 'старт') {
-        const frontUrl = process.env.FRONT_ORIGIN || 'http://localhost:5173'
-        await sendMessage(
-          userId,
-          'Используйте кнопку ниже для открытия мини-приложения:',
-          [{
-            text: '🗺️ Открыть Lost&Found',
-            url: frontUrl
-          }]
-        )
-      } else {
-        // TODO: Добавить FSM для обработки диалогов
-        await sendMessage(
-          userId,
-          'Пока я не умею обрабатывать сообщения. Используйте мини-приложение! 😊'
-        )
-      }
-      break
-    }
-
-    case 'message_callback': {
-      // Нажатие на inline-кнопку
-      console.log('[MAX] Callback:', update?.callback)
-      break
-    }
-
-    default:
-      console.log('[MAX] Неизвестное событие:', type)
+export async function startBot() {
+  const bot = ensureBot()
+  if (!bot) {
+    return
   }
+
+  try {
+    await bot.start()
+  } catch (error) {
+    console.error('[MAX] Ошибка запуска long polling:', error)
+    throw error
+  }
+}
+
+export async function handleUpdate(update) {
+  const bot = ensureBot()
+  if (!bot) {
+    console.warn('[MAX] Получено событие, но бот не настроен')
+    return
+  }
+
+  await bot.handleUpdate(update)
+}
+
+export async function sendMessage(userId, text, extra = {}) {
+  const bot = ensureBot()
+  if (!bot) {
+    throw new Error('MAX Bot не настроен')
+  }
+
+  return bot.api.sendMessageToUser(userId, text, extra)
 }
 
