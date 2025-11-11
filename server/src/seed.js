@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { pool } from './db.js';
 
-const categories = ['keys','phone','wallet','document','pet','bag'];
+const categories = ['keys', 'electronics', 'valuable', 'document', 'pet', 'wear', 'other'];
 const rnd = (a,b)=> a + Math.random()*(b-a);
 
 async function seed() {

@@ -63,13 +63,28 @@ const FLOW_START_STEP = {
 }
 
 const CATEGORY_OPTIONS = [
-  { id: 'pet', title: 'Животное', emoji: '🐾' },
-  { id: 'phone', title: 'Электроника', emoji: '📱' },
-  { id: 'bag', title: 'Сумка/аксессуар', emoji: '🎒' },
+  { id: 'pet', title: 'Животные', emoji: '🐾' },
+  { id: 'electronics', title: 'Электроника', emoji: '📱' },
+  { id: 'wear', title: 'Одежда и аксессуары', emoji: '👜' },
   { id: 'document', title: 'Документы', emoji: '📄' },
+  { id: 'valuable', title: 'Ценности', emoji: '💍' },
   { id: 'keys', title: 'Ключи', emoji: '🔑' },
-  { id: 'wallet', title: 'Ценности', emoji: '💍' }
+  { id: 'other', title: 'Другое', emoji: '❓' }
 ]
+
+const CATEGORY_ALIASES = {
+  phone: 'electronics',
+  electronics: 'electronics',
+  gadget: 'electronics',
+  bag: 'wear',
+  clothes: 'wear',
+  clothing: 'wear',
+  wallet: 'valuable',
+  valuables: 'valuable',
+  jewelry: 'valuable',
+  misc: 'other',
+  unknown: 'other'
+}
 
 const CATEGORY_FIELD_SETS = {
   pet: [
@@ -111,7 +126,7 @@ const CATEGORY_FIELD_SETS = {
       required: false
     }
   ],
-  phone: [
+  electronics: [
     {
       key: 'device',
       label: 'Устройство',
@@ -138,31 +153,31 @@ const CATEGORY_FIELD_SETS = {
       key: 'serial_hint',
       label: 'Уникальная метка',
       question: {
-        lost: 'Укажите уникальную метку (последние цифры IMEI или защитный знак). Это сохранится в секрете.',
-        found: 'Опишите, какие уникальные метки заметили (не раскрывая полностью).'
+        lost: 'Укажите уникальную метку (последние цифры IMEI/серийника или защитный знак). Она сохранится в секретах.',
+        found: 'Опишите уникальные метки (не раскрывая полностью). Например, наклейка или часть серийника.'
       },
       hint: 'Например: IMEI заканчивается на 4821, наклейка внизу.',
       required: false,
       store: 'secret_hint'
     }
   ],
-  bag: [
+  wear: [
     {
-      key: 'type',
+      key: 'item_type',
       label: 'Тип предмета',
-      question: 'Что именно потеряно/найдено? (рюкзак, сумка, портфель и т.п.)',
+      question: 'Что именно? (куртка, шарф, рюкзак, портфель и т.п.)',
       required: true
     },
     {
       key: 'brand',
-      label: 'Бренд',
+      label: 'Бренд / марка',
       question: 'Если есть бренд/марка — напишите.',
       required: false
     },
     {
       key: 'color',
       label: 'Цвет / материал',
-      question: 'Цвет и материал? (например, чёрная кожа)',
+      question: 'Цвет и материал? (например, чёрная кожа, синяя ткань)',
       required: true
     },
     {
@@ -192,10 +207,36 @@ const CATEGORY_FIELD_SETS = {
       key: 'extra',
       label: 'Дополнительные данные',
       question: {
-        lost: 'Есть ли дополнительные идентификаторы (орган выдачи, дата)?',
-        found: 'Какие ещё данные видны? Номера полностью не публикуем.'
+        lost: 'Есть ли характерная особенность? (серия начинается на 45 XX, выдан в МФЦ и т.п.)',
+        found: 'Есть ли характерная особенность? (печати, отметки, часть номера).'
       },
-      required: false
+      hint: 'Полные серии/номера писать не нужно — используйте подсказки для секрета.',
+      required: false,
+      store: 'secret_hint'
+    }
+  ],
+  valuable: [
+    {
+      key: 'item',
+      label: 'Предмет',
+      question: 'Что за ценность? (кошелёк, украшение, техника и т.д.)',
+      required: true
+    },
+    {
+      key: 'looks',
+      label: 'Внешний вид',
+      question: 'Как выглядит предмет? Цвет, материал, форма.',
+      required: true
+    },
+    {
+      key: 'value_hint',
+      label: 'Уникальные детали',
+      question: {
+        lost: 'Какие уникальные детали есть? (внутри записка, гравировка — можно упомянуть частично)',
+        found: 'Опишите без раскрытия полной информации: гравировка, инициалы, особенность упаковки.'
+      },
+      required: false,
+      store: 'secret_hint'
     }
   ],
   keys: [
@@ -221,29 +262,39 @@ const CATEGORY_FIELD_SETS = {
       required: false
     }
   ],
-  wallet: [
+  other: [
     {
       key: 'item',
-      label: 'Предмет',
-      question: 'Что за ценность? (кошелёк, украшение, техника и т.д.)',
+      label: 'Что за предмет',
+      question: 'Опишите предмет: что это и для чего нужно.',
       required: true
     },
     {
-      key: 'looks',
+      key: 'appearance',
       label: 'Внешний вид',
-      question: 'Как выглядит предмет? Цвет, материал, форма.',
+      question: 'Как выглядит предмет? Цвет, форма, размер.',
       required: true
     },
     {
-      key: 'value_hint',
-      label: 'Уникальные детали',
-      question: {
-        lost: 'Какие уникальные детали есть? (внутри записка, гравировка — можно упомянуть частично)',
-        found: 'Опишите без раскрытия полной информации: гравировка, чья инициалы?'
-      },
+      key: 'tags',
+      label: 'Дополнительные приметы',
+      question: 'Укажите до трёх примет через запятую (например: «новый, в коробке, с чеком»).',
       required: false
     }
   ]
+}
+
+function normalizeCategoryId(category) {
+  if (!category) {
+    return category
+  }
+  const lower = String(category).toLowerCase()
+  return CATEGORY_ALIASES[lower] ?? lower
+}
+
+function getCategoryOption(categoryId) {
+  const normalized = normalizeCategoryId(categoryId)
+  return CATEGORY_OPTIONS.find(option => option.id === normalized) ?? null
 }
 
 const ATTRIBUTE_STEP_LABEL = 'Шаг 2/6 — описание'
@@ -891,7 +942,7 @@ function describeCategory(categoryId) {
   if (!categoryId) {
     return '—'
   }
-  const option = CATEGORY_OPTIONS.find(item => item.id === categoryId)
+  const option = getCategoryOption(categoryId)
   return option ? `${option.emoji} ${option.title}` : categoryId
 }
 
@@ -904,10 +955,11 @@ function isAttributesStep(step) {
 }
 
 function getCategoryFields(flow, category) {
-  if (!category) {
+  const normalized = normalizeCategoryId(category)
+  if (!normalized) {
     return []
   }
-  return CATEGORY_FIELD_SETS[category] ?? []
+  return CATEGORY_FIELD_SETS[normalized] ?? []
 }
 
 function getAttributeField(flow, category, key) {
@@ -923,7 +975,12 @@ function prepareAttributesPayload(payload, flow) {
   nextPayload.listing = nextPayload.listing ?? createEmptyListing(flow)
   nextPayload.listing.attributes = nextPayload.listing.attributes ?? {}
 
-  const fields = getCategoryFields(flow, nextPayload.listing.category)
+  const normalizedCategory = normalizeCategoryId(nextPayload.listing.category)
+  if (normalizedCategory) {
+    nextPayload.listing.category = normalizedCategory
+  }
+
+  const fields = getCategoryFields(flow, normalizedCategory)
 
   if (fields.length === 0) {
     delete nextPayload.meta.currentAttributeKey
@@ -1122,7 +1179,13 @@ function buildListingPayload(flow, listing) {
   }
 
   const type = listing.type ?? (flow === FLOWS.LOST ? 'LOST' : 'FOUND')
-  const category = listing.category
+  const category = normalizeCategoryId(listing.category)
+
+  if (!category) {
+    throw new Error('Категория не распознана')
+  }
+
+  listing.category = category
   const attributes = listing.attributes ?? {}
   const fields = getCategoryFields(flow, category)
 
@@ -1184,7 +1247,7 @@ function buildListingPayload(flow, listing) {
 }
 
 function categoryTitle(categoryId) {
-  return CATEGORY_OPTIONS.find(option => option.id === categoryId)?.title ?? categoryId
+  return getCategoryOption(categoryId)?.title ?? categoryId
 }
 
 function extractPhotoUrl(photo) {
@@ -1449,6 +1512,9 @@ function createRuntime(userProfile, record) {
   }
 
   const payload = record.payload ?? {}
+  if (payload.listing?.category) {
+    payload.listing.category = normalizeCategoryId(payload.listing.category)
+  }
   const flow = payload.flow ?? STEP_TO_FLOW[record.step] ?? null
 
   return {

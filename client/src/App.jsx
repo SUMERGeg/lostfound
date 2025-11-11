@@ -1,18 +1,30 @@
-import { Outlet, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Outlet, Link, useLocation } from 'react-router-dom'
 import Filters from './components/Filters.jsx'
 
+const initialFilters = { type: '', category: '' }
+
 export default function AppLayout() {
+  const [filters, setFilters] = useState(initialFilters)
+  const location = useLocation()
+
+  const showFilters = location.pathname === '/' || location.pathname.startsWith('/map')
+
+  function handleApply(nextFilters) {
+    setFilters(prev => ({ ...prev, ...nextFilters }))
+  }
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ padding: '16px', background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-        <nav style={{ display: 'flex', gap: '12px' }}>
+    <div className="layout">
+      <header className="layout__header">
+        <nav className="layout__nav">
           <Link to="/">Лента</Link>
           <Link to="/map">Карта</Link>
         </nav>
       </header>
-      <main style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <Filters />
-        <Outlet />
+      <main className="layout__main">
+        {showFilters && <Filters value={filters} onApply={handleApply} />}
+        <Outlet context={{ filters }} />
       </main>
     </div>
   )
