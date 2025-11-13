@@ -36,10 +36,12 @@ function resolveSecretKey(source) {
 
 export function encryptSecrets(values = []) {
   return values
-    .filter(value => typeof value === 'string')
-    .map(value => value.trim())
-    .filter(value => value.length > 0)
-    .map(value => encryptSecret(value))
+    .map(normalizeSecretEntry)
+    .filter(Boolean)
+    .map(entry => ({
+      question: entry.question,
+      cipher: encryptSecret(entry.answer)
+    }))
 }
 
 export function encryptSecret(value) {
@@ -65,6 +67,59 @@ export function encryptSecret(value) {
 
 export function isEncryptionEnabled() {
   return Boolean(SECRET_KEY)
+}
+
+export function decryptSecret(payload = {}) {
+  if (!payload || typeof payload !== 'object') {
+    return ''
+  }
+
+  if (!SECRET_KEY || payload.type === 'plain') {
+    return payload.value ?? ''
+  }
+
+  if (payload.type !== SECRET_ALGO) {
+    return ''
+  }
+
+  try {
+    const iv = Buffer.from(payload.iv, 'base64')
+    const tag = Buffer.from(payload.tag, 'base64')
+    const encrypted = Buffer.from(payload.data, 'base64')
+    const decipher = crypto.createDecipheriv(SECRET_ALGO, SECRET_KEY, iv)
+    decipher.setAuthTag(tag)
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()])
+    return decrypted.toString('utf8')
+  } catch (error) {
+    console.error('[security] Не удалось расшифровать секрет:', error)
+    return ''
+  }
+}
+
+function normalizeSecretEntry(entry) {
+  if (!entry) {
+    return null
+  }
+
+  if (typeof entry === 'string') {
+    const answer = entry.trim()
+    if (!answer) {
+      return null
+    }
+    return { question: '', answer }
+  }
+
+  if (typeof entry !== 'object') {
+    return null
+  }
+
+  const answer = typeof entry.answer === 'string' ? entry.answer.trim() : ''
+  if (!answer) {
+    return null
+  }
+
+  const question = typeof entry.question === 'string' ? entry.question.trim() : ''
+  return { question, answer }
 }
 
 

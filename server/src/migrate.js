@@ -48,6 +48,41 @@ CREATE TABLE IF NOT EXISTS matches (
   UNIQUE KEY uniq_pair (lost_id, found_id)
 );
 
+CREATE TABLE IF NOT EXISTS chats (
+  id               VARCHAR(36) PRIMARY KEY,
+  lost_listing_id  VARCHAR(36),
+  found_listing_id VARCHAR(36),
+  initiator_id     VARCHAR(36) NOT NULL,
+  holder_id        VARCHAR(36) NOT NULL,
+  claimant_id      VARCHAR(36) NOT NULL,
+  type ENUM('OWNER_CHECK','DIALOG') NOT NULL,
+  status ENUM('PENDING','ACTIVE','DECLINED','CLOSED') DEFAULT 'PENDING',
+  last_message_at  TIMESTAMP NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_chats_status (status, updated_at),
+  INDEX idx_chats_listings (lost_listing_id, found_listing_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_members (
+  chat_id    VARCHAR(36) NOT NULL,
+  user_id    VARCHAR(36) NOT NULL,
+  role       ENUM('CLAIMANT','HOLDER','OBSERVER') NOT NULL,
+  joined_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (chat_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         VARCHAR(36) PRIMARY KEY,
+  chat_id    VARCHAR(36) NOT NULL,
+  sender_id  VARCHAR(36) NOT NULL,
+  body       TEXT,
+  meta       JSON,
+  status     ENUM('SENT','BLOCKED') DEFAULT 'SENT',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_chat_messages_chat (chat_id, created_at)
+);
+
 CREATE TABLE IF NOT EXISTS states (
   user_id     VARCHAR(36) PRIMARY KEY,
   step        VARCHAR(64) NOT NULL,

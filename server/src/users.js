@@ -40,4 +40,38 @@ export async function ensureUser(maxUserId, { phone } = {}) {
   return { userId, maxUserId: maxId }
 }
 
+export async function upsertUserContact(maxUserId, phone) {
+  if (!maxUserId || !phone) {
+    return
+  }
+
+  const normalizedPhone = normalizePhone(phone)
+  if (!normalizedPhone) {
+    return
+  }
+
+  const { userId } = await ensureUser(maxUserId)
+  await pool.query('UPDATE users SET phone = ? WHERE id = ?', [normalizedPhone, userId])
+}
+
+function normalizePhone(value) {
+  if (!value) {
+    return null
+  }
+  const digits = String(value).replace(/\D+/g, '')
+  if (digits.length === 11 && digits.startsWith('8')) {
+    return `+7${digits.slice(1)}`
+  }
+  if (digits.length === 11 && digits.startsWith('7')) {
+    return `+7${digits.slice(1)}`
+  }
+  if (digits.length === 10) {
+    return `+7${digits}`
+  }
+  if (digits.startsWith('+') && digits.length >= 11) {
+    return digits
+  }
+  return null
+}
+
 

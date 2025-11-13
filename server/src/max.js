@@ -7,6 +7,7 @@ import {
   handleMessage as handleFlowMessage,
   handleCallback as handleFlowCallback
 } from './fsm.js'
+import { upsertUserContact } from './users.js'
 
 const MAX_API_BASE = process.env.MAX_API_BASE
 const MAX_BOT_TOKEN = process.env.MAX_BOT_TOKEN
@@ -77,6 +78,9 @@ function ensureBot() {
   })
 
   bot.on('message_created', async ctx => {
+    if (ctx.contactInfo?.tel) {
+      await upsertUserContact(ctx.user?.id, ctx.contactInfo.tel)
+    }
     await handleFlowMessage(ctx)
   })
 
@@ -136,4 +140,4 @@ export async function sendMessage(userId, text, extra = {}) {
       }
 
   return bot.api.sendMessageToUser(userId, text, extra)
-}
+  }
