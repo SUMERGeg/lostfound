@@ -31,7 +31,8 @@ export const FLOWS = {
   LOST: 'lost',
   FOUND: 'found',
   OWNER: 'owner',
-  VOLUNTEER: 'volunteer'
+  VOLUNTEER: 'volunteer',
+  MY: 'my'
 }
 
 export const STEPS = {
@@ -53,7 +54,15 @@ export const STEPS = {
   OWNER_CHECK_WAITING: 'owner_check_waiting',
   VOLUNTEER_LOCATION: 'volunteer_location',
   VOLUNTEER_INTRO: 'volunteer_intro',
-  VOLUNTEER_LIST: 'volunteer_list'
+  VOLUNTEER_LIST: 'volunteer_list',
+  MY_LIST: 'my_list',
+  MY_EDIT_MENU: 'my_edit_menu',
+  MY_EDIT_TITLE: 'my_edit_title',
+  MY_EDIT_DESCRIPTION: 'my_edit_description',
+  MY_EDIT_CATEGORY: 'my_edit_category',
+  MY_EDIT_OCCURRED: 'my_edit_occurred',
+  MY_EDIT_LOCATION: 'my_edit_location',
+  MY_EDIT_PHOTOS: 'my_edit_photos'
 }
 
 const FLOW_STEP_MAP = {
@@ -82,6 +91,16 @@ const FLOW_STEP_MAP = {
     LOCATION: STEPS.VOLUNTEER_LOCATION,
     INTRO: STEPS.VOLUNTEER_INTRO,
     LIST: STEPS.VOLUNTEER_LIST
+  },
+  [FLOWS.MY]: {
+    LIST: STEPS.MY_LIST,
+    EDIT_MENU: STEPS.MY_EDIT_MENU,
+    EDIT_TITLE: STEPS.MY_EDIT_TITLE,
+    EDIT_DESCRIPTION: STEPS.MY_EDIT_DESCRIPTION,
+    EDIT_CATEGORY: STEPS.MY_EDIT_CATEGORY,
+    EDIT_OCCURRED: STEPS.MY_EDIT_OCCURRED,
+    EDIT_LOCATION: STEPS.MY_EDIT_LOCATION,
+    EDIT_PHOTOS: STEPS.MY_EDIT_PHOTOS
   }
 }
 
@@ -96,7 +115,8 @@ const FLOW_START_STEP = {
   [FLOWS.LOST]: FLOW_STEP_MAP[FLOWS.LOST].CATEGORY,
   [FLOWS.FOUND]: FLOW_STEP_MAP[FLOWS.FOUND].CATEGORY,
   [FLOWS.OWNER]: FLOW_STEP_MAP[FLOWS.OWNER].INTRO,
-  [FLOWS.VOLUNTEER]: FLOW_STEP_MAP[FLOWS.VOLUNTEER].INTRO
+  [FLOWS.VOLUNTEER]: FLOW_STEP_MAP[FLOWS.VOLUNTEER].INTRO,
+  [FLOWS.MY]: FLOW_STEP_MAP[FLOWS.MY].LIST
 }
 
 const AUXILIARY_FLOWS = new Set(['menu'])
@@ -373,7 +393,8 @@ const ATTRIBUTE_STEP_LABEL = 'Шаг 2/6 — описание'
 const FLOW_KEYWORDS = {
   [FLOWS.LOST]: ['потерял', 'потеряла', 'потеряли', '/lost'],
   [FLOWS.FOUND]: ['нашёл', 'нашел', 'нашла', 'нашли', '/found'],
-  [FLOWS.VOLUNTEER]: ['волонтёрить', 'волонтерить', '/volunteer']
+  [FLOWS.VOLUNTEER]: ['волонтёрить', 'волонтерить', '/volunteer'],
+  [FLOWS.MY]: ['мои объявления', 'мои объявление', '/my']
 }
 
 const NOTIFICATION_KEYWORDS = new Set(['уведомления', 'уведомление', 'notifications', '/notifications'])
@@ -454,6 +475,11 @@ const FLOW_COPY = {
       'Помогаем искать потерявшихся питомцев. Ниже покажем ближайшие активные заявки по животным. Выберите карточку, чтобы посмотреть детали и связаться с владельцем.',
     emptyText:
       'Сейчас нет активных заявок по животным. Загляните позже или включите уведомления — сообщим, когда появится новая.'
+  },
+  [FLOWS.MY]: {
+    emoji: '📂',
+    label: 'Мои объявления',
+    emptyText: 'У вас ещё нет объявлений. Нажмите «Потерял» или «Нашёл», чтобы создать первое.'
   }
 }
 
@@ -475,7 +501,15 @@ const StepHandlers = {
   [STEPS.OWNER_CHECK_WAITING]: createOwnerCheckWaitingHandler(),
   [STEPS.VOLUNTEER_LOCATION]: createVolunteerLocationHandler(),
   [STEPS.VOLUNTEER_INTRO]: createVolunteerIntroHandler(),
-  [STEPS.VOLUNTEER_LIST]: createVolunteerListHandler()
+  [STEPS.VOLUNTEER_LIST]: createVolunteerListHandler(),
+  [STEPS.MY_LIST]: createMyListHandler(),
+  [STEPS.MY_EDIT_MENU]: createMyEditMenuHandler(),
+  [STEPS.MY_EDIT_TITLE]: createMyEditTitleHandler(),
+  [STEPS.MY_EDIT_DESCRIPTION]: createMyEditDescriptionHandler(),
+  [STEPS.MY_EDIT_CATEGORY]: createMyEditCategoryHandler(),
+  [STEPS.MY_EDIT_OCCURRED]: createMyEditOccurredHandler(),
+  [STEPS.MY_EDIT_LOCATION]: createMyEditLocationHandler(),
+  [STEPS.MY_EDIT_PHOTOS]: createMyEditPhotosHandler()
 }
 
 export function buildMainMenuKeyboard() {
@@ -486,6 +520,7 @@ export function buildMainMenuKeyboard() {
     ]
   ]
 
+  rows.push([button.callback('📂 Мои объявления', buildFlowPayload(FLOWS.MY, 'start'))])
   rows.push([button.callback('🐾 Волонтёрить', buildFlowPayload(FLOWS.VOLUNTEER, 'start'))])
   rows.push([button.callback('🔔 Уведомления', buildFlowPayload('menu', 'notifications'))])
 
@@ -1628,6 +1663,200 @@ function createVolunteerListHandler() {
       }
 
       await safeAnswerOnCallback(ctx, { notification: 'Действие не поддерживается' })
+    }
+  }
+}
+
+function createMyListHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const userId = runtime.user?.userId
+      if (!userId) {
+        await ctx.reply('Не удалось определить пользователя. Попробуйте позже.')
+        await sendMainMenu(ctx)
+        return
+      }
+
+      const listings = await fetchMyListings(userId)
+
+      if (!listings.length) {
+        await clearStateRecord(userId)
+        const emptyText = FLOW_COPY[FLOWS.MY].emptyText
+        await ctx.reply(`📂 ${emptyText}`)
+        await sendMainMenu(ctx, 'Готовы создать первое объявление?')
+        return
+      }
+
+      const nextPayload = withMyPayload(runtime, my => {
+        my.items = listings
+        my.editingId = null
+      })
+      await saveStateRecord(userId, STEPS.MY_LIST, nextPayload)
+
+      await ctx.reply(`📂 Ваши объявления (${listings.length})`)
+      await sendMyListings(ctx, listings)
+
+      await ctx.reply('Выберите объявление, чтобы посмотреть или изменить его.', {
+        attachments: [
+          inlineKeyboard([
+            [button.callback('🔄 Обновить список', buildFlowPayload(FLOWS.MY, 'refresh'))],
+            [button.callback('⬅️ Главное меню', buildFlowPayload(FLOWS.MY, 'back'))]
+          ])
+        ]
+      })
+    },
+    onMessage: async ctx => {
+      await ctx.reply('Используйте кнопки под объявлениями или «🔄 Обновить список».')
+    },
+    onCallback: async (ctx, runtime, parsed) => {
+      const userId = runtime.user?.userId
+      switch (parsed.action) {
+        case 'refresh': {
+          await safeAnswerOnCallback(ctx, { notification: 'Обновляю список' })
+          const listings = await fetchMyListings(userId)
+          if (!listings.length) {
+            await clearStateRecord(userId)
+            await ctx.reply('📂 Объявлений больше нет.')
+            await sendMainMenu(ctx)
+            return
+          }
+          const nextPayload = withMyPayload(runtime, my => {
+            my.items = listings
+            my.editingId = null
+          })
+          await saveStateRecord(userId, STEPS.MY_LIST, nextPayload)
+          await ctx.reply('📂 Обновлённый список:')
+          await sendMyListings(ctx, listings)
+          return
+        }
+        case 'edit_menu': {
+          const listingId = parsed.value
+          if (!listingId) {
+            await safeAnswerOnCallback(ctx, { notification: 'ID объявления не найден' })
+            return
+          }
+          const nextPayload = withMyPayload(runtime, my => {
+            my.editingId = listingId
+          })
+          await saveStateRecord(userId, STEPS.MY_EDIT_MENU, nextPayload)
+          await safeAnswerOnCallback(ctx, { notification: 'Настройка объявления' })
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'toggle_status': {
+          const listingId = parsed.value
+          if (!listingId) {
+            await safeAnswerOnCallback(ctx, { notification: 'ID объявления не найден' })
+            return
+          }
+          const nextStatus = await toggleListingStatus(listingId, userId)
+          if (!nextStatus) {
+            await safeAnswerOnCallback(ctx, { notification: 'Не удалось изменить статус' })
+            return
+          }
+          const statusLabel = nextStatus === 'ACTIVE' ? 'Объявление снова активно' : 'Объявление закрыто'
+          const listings = await fetchMyListings(userId)
+          if (!listings.length) {
+            await clearStateRecord(userId)
+            await safeAnswerOnCallback(ctx, { notification: statusLabel })
+            await ctx.reply('📂 Объявлений больше нет.')
+            await sendMainMenu(ctx)
+            return
+          }
+          const nextPayload = withMyPayload(runtime, my => {
+            my.items = listings
+            my.editingId = null
+          })
+          await saveStateRecord(userId, STEPS.MY_LIST, nextPayload)
+          await safeAnswerOnCallback(ctx, { notification: statusLabel })
+          await ctx.reply('📂 Обновлённый список:')
+          await sendMyListings(ctx, listings)
+          return
+        }
+        case 'back': {
+          await safeAnswerOnCallback(ctx, { notification: 'Главное меню' })
+          await clearStateRecord(userId)
+          await sendMainMenu(ctx)
+          return
+        }
+        default:
+          await safeAnswerOnCallback(ctx, { notification: 'Действие не поддерживается' })
+      }
+    }
+  }
+}
+
+function createMyEditDescriptionHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+
+      await ctx.reply(
+        [
+          '💬 Текущее описание:',
+          listing.description?.trim?.() ? truncateText(listing.description, 500) : '— нет описания —',
+          '',
+          'Отправьте новое описание. Можно использовать несколько предложений.',
+          '',
+          'Команды: /back — вернуться в меню, /cancel — выйти в главное меню.'
+        ].join('\n')
+      )
+    },
+    onMessage: async (ctx, runtime, message) => {
+      const lower = message.lower ?? ''
+      if (CANCEL_KEYWORDS.includes(lower)) {
+        await clearStateRecord(runtime.user.userId)
+        await ctx.reply('Редактирование отменено.')
+        await sendMainMenu(ctx)
+        return
+      }
+
+      if (BACK_KEYWORDS.includes(lower)) {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const editingId = runtime.payload?.my?.editingId
+      if (!editingId) {
+        await ctx.reply('Не найдено объявление для обновления.')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const text = message.text?.trim?.() ?? ''
+      if (text.length < 10) {
+        await ctx.reply('Опишите находку или потерю чуть подробнее (минимум 10 символов).')
+        return
+      }
+
+      const updated = await updateListingDescription(editingId, runtime.user.userId, text)
+      if (!updated) {
+        await ctx.reply('Не удалось обновить описание. Попробуйте позже.')
+        return
+      }
+
+      const nextPayload = withMyPayload(runtime, my => {
+        my.editingId = editingId
+        if (Array.isArray(my.items)) {
+          const item = my.items.find(entry => entry.id === editingId)
+          if (item) {
+            item.description = text
+          }
+        }
+      })
+
+      await ctx.reply('Описание обновлено ✅')
+      await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+    },
+    onCallback: async (ctx, runtime, parsed) => {
+      if (parsed.action === 'back_to_list') {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+      await safeAnswerOnCallback(ctx, { notification: 'Отправьте текст или /back' })
     }
   }
 }
@@ -3372,7 +3601,7 @@ function getSecretsFormatHint(flow) {
   if (flow === FLOWS.FOUND) {
     return 'Формат: «Вопрос :: ожидаемый ответ». Вопрос увидит владелец, ответ хранится в секрете.'
   }
-  return 'Формат: «Признак :: пояснение». Например: «Внутри записка :: имя „Оля“». Если пояснение не нужно — можно написать просто признак.'
+  return 'Формат: «Признак :: пояснение». Например: «Внутри записка :: имя „Оля"». Если пояснение не нужно — можно написать просто признак.'
 }
 
 function parseSecretEntries(flow, text) {
@@ -4077,6 +4306,16 @@ async function clearStateRecord(userId) {
 }
 
 function createInitialPayload(flow) {
+  if (flow === FLOWS.MY) {
+    return {
+      flow,
+      my: {
+        items: [],
+        editingId: null
+      }
+    }
+  }
+
   return {
     flow,
     listing: createEmptyListing(flow),
@@ -4192,6 +4431,17 @@ function withVolunteerPayload(runtime, mutator) {
   return nextPayload
 }
 
+function withMyPayload(runtime, mutator) {
+  const baseFlow = FLOWS.MY
+  const nextPayload = clonePayload(runtime.payload ?? { flow: baseFlow })
+  if (!nextPayload.flow) {
+    nextPayload.flow = baseFlow
+  }
+  nextPayload.my = nextPayload.my ?? { items: [], editingId: null }
+  mutator(nextPayload.my, nextPayload)
+  return nextPayload
+}
+
 function clonePayload(payload) {
   if (!payload) {
     return {}
@@ -4238,5 +4488,773 @@ async function safeAnswerOnCallback(ctx, extra) {
   } catch (error) {
     console.error('[FSM] answerOnCallback error:', error)
   }
+}
+
+const MY_LIST_DATE_FORMATTER = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+async function sendMyListings(ctx, listings) {
+  for (const [index, listing] of listings.entries()) {
+    const message = buildMyListingMessage(listing, index)
+    const keyboard = buildMyListingActions(listing)
+    await ctx.reply(message, keyboard ? { attachments: [keyboard] } : undefined)
+  }
+}
+
+function buildMyListingMessage(listing, index) {
+  const typeEmoji = listing.type === 'FOUND' ? '📦' : '🆘'
+  const statusText = listing.status === 'ACTIVE' ? 'активно' : 'закрыто'
+  const lines = [
+    `${index + 1}. ${typeEmoji} ${listing.title ?? 'Без названия'}`,
+    `Статус: ${statusText}`
+  ]
+
+  if (listing.created_at) {
+    lines.push(`Создано: ${formatDateTime(listing.created_at)}`)
+  }
+
+  if (listing.occurred_at) {
+    lines.push(`Событие: ${formatDateTime(listing.occurred_at)}`)
+  }
+
+  if (listing.description) {
+    lines.push('', truncateText(listing.description, 320))
+  }
+
+  return lines.join('\n')
+}
+
+function buildMyListingActions(listing) {
+  const rows = [
+    [button.callback('👁️ Просмотр', buildFlowPayload('menu', 'show_listing', listing.id))],
+    [button.callback('✏️ Редактировать', buildFlowPayload(FLOWS.MY, 'edit_menu', listing.id))]
+  ]
+
+  const statusButtonText = listing.status === 'ACTIVE' ? '✅ Закрыть объявление' : '🔁 Вернуть в активные'
+  rows.push([button.callback(statusButtonText, buildFlowPayload(FLOWS.MY, 'toggle_status', listing.id))])
+
+  return inlineKeyboard(rows)
+}
+
+function buildEditDescriptionPreview(listing) {
+  const lines = [
+    '✏️ Изменяем описание объявления.',
+    '',
+    `${listing.title ?? 'Без названия'}`,
+    '',
+    'Текущее описание:',
+    listing.description?.trim?.() ? truncateText(listing.description, 500) : '— нет описания —'
+  ]
+  return lines.join('\n')
+}
+
+async function fetchMyListings(userId, { limit = 10 } = {}) {
+  if (!userId) {
+    return []
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, title, type, status, category, description, occurred_at, created_at
+     FROM listings
+     WHERE author_id = ?
+     ORDER BY (status = 'ACTIVE') DESC, created_at DESC
+     LIMIT ?`,
+    [userId, Number(limit)]
+  )
+
+  return rows
+}
+
+async function fetchListingForOwner(listingId, userId) {
+  if (!listingId || !userId) {
+    return null
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, title, type, status, category, description, occurred_at, created_at, lat, lng
+     FROM listings
+     WHERE id = ? AND author_id = ?
+     LIMIT 1`,
+    [listingId, userId]
+  )
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return rows[0]
+}
+
+async function updateListingDescription(listingId, userId, description) {
+  if (!listingId || !userId) {
+    return false
+  }
+
+  const trimmed = description.trim()
+  const [result] = await pool.query(
+    'UPDATE listings SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [trimmed, listingId, userId]
+  )
+
+  return result.affectedRows > 0
+}
+
+async function toggleListingStatus(listingId, userId) {
+  if (!listingId || !userId) {
+    return null
+  }
+
+  const [rows] = await pool.query(
+    'SELECT status FROM listings WHERE id = ? AND author_id = ? LIMIT 1',
+    [listingId, userId]
+  )
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  const current = rows[0].status
+  const nextStatus = current === 'ACTIVE' ? 'CLOSED' : 'ACTIVE'
+  const [result] = await pool.query(
+    'UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [nextStatus, listingId, userId]
+  )
+
+  if (result.affectedRows === 0) {
+    return null
+  }
+
+  return nextStatus
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return 'не указано'
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'не указано'
+  }
+  return MY_LIST_DATE_FORMATTER.format(date)
+}
+
+function truncateText(text, limit = 280) {
+  const value = String(text ?? '').trim()
+  if (value.length <= limit) {
+    return value
+  }
+  return `${value.slice(0, limit - 1).trimEnd()}…`
+}
+
+function createMyEditMenuHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listingId = runtime.payload?.my?.editingId
+      if (!listingId) {
+        await ctx.reply('Не выбрано объявление для редактирования.')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const listing = await fetchListingForOwner(listingId, runtime.user.userId)
+      if (!listing) {
+        await ctx.reply('Карточка не найдена или уже удалена.')
+        const nextPayload = withMyPayload(runtime, my => {
+          my.editingId = null
+        })
+        await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, nextPayload, { skipIntro: true })
+        return
+      }
+
+      const syncedPayload = withMyPayload(runtime, my => {
+        if (!Array.isArray(my.items)) {
+          my.items = []
+        }
+        const existing = my.items.find(entry => entry.id === listing.id)
+        if (existing) {
+          Object.assign(existing, listing)
+        }
+      })
+      runtime.payload = syncedPayload
+      await saveStateRecord(runtime.user.userId, STEPS.MY_EDIT_MENU, syncedPayload)
+
+      const lines = [
+        '✏️ Что хотите изменить?',
+        '',
+        `${listing.title ?? 'Без названия'}`,
+        `Категория: ${describeCategory(listing.category)}`,
+        `Статус: ${listing.status === 'ACTIVE' ? 'активно' : 'закрыто'}`,
+        `Добавлено: ${formatDateTime(listing.created_at)}`
+      ]
+
+      if (listing.occurred_at) {
+        lines.push(`Событие: ${formatDateTime(listing.occurred_at)}`)
+      }
+
+      await ctx.reply(lines.join('\n'))
+      await ctx.reply('Выберите параметр для редактирования.', {
+        attachments: [
+          inlineKeyboard([
+            [button.callback('📝 Название', buildFlowPayload(FLOWS.MY, 'edit_title'))],
+            [button.callback('💬 Описание', buildFlowPayload(FLOWS.MY, 'edit_description'))],
+            [button.callback('🗂 Категория', buildFlowPayload(FLOWS.MY, 'edit_category'))],
+            [button.callback('🕒 Время события', buildFlowPayload(FLOWS.MY, 'edit_occurred'))],
+            [button.callback('📍 Локация', buildFlowPayload(FLOWS.MY, 'edit_location'))],
+            [button.callback('🖼 Фото', buildFlowPayload(FLOWS.MY, 'edit_photos'))],
+            [button.callback('⬅️ К списку', buildFlowPayload(FLOWS.MY, 'back_to_list'))]
+          ])
+        ]
+      })
+    },
+    onMessage: async ctx => {
+      await ctx.reply('Используйте кнопки, чтобы выбрать, что редактировать.')
+    },
+    onCallback: async (ctx, runtime, parsed) => {
+      const userId = runtime.user?.userId
+      const ensurePayload = () => withMyPayload(runtime, my => {
+        if (!my.editingId) {
+          my.editingId = runtime.payload?.my?.editingId ?? null
+        }
+      })
+      switch (parsed.action) {
+        case 'edit_title': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Изменяем название' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_TITLE, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_TITLE, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'edit_description': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Изменяем описание' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_DESCRIPTION, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_DESCRIPTION, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'edit_category': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Изменяем категорию' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_CATEGORY, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_CATEGORY, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'edit_occurred': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Изменяем дату/время' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_OCCURRED, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_OCCURRED, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'edit_location': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Изменяем локацию' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_LOCATION, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_LOCATION, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'edit_photos': {
+          const nextPayload = ensurePayload()
+          await safeAnswerOnCallback(ctx, { notification: 'Заменяем фото' })
+          await saveStateRecord(userId, STEPS.MY_EDIT_PHOTOS, nextPayload)
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_PHOTOS, nextPayload, { skipIntro: true })
+          return
+        }
+        case 'back_to_list': {
+          const nextPayload = withMyPayload(runtime, my => {
+            my.editingId = null
+          })
+          await safeAnswerOnCallback(ctx, { notification: 'К списку' })
+          await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, nextPayload, { skipIntro: true })
+          return
+        }
+        default:
+          await safeAnswerOnCallback(ctx, { notification: 'Действие не поддерживается' })
+      }
+    }
+  }
+}
+
+function createMyEditTitleHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+      await ctx.reply(
+        [
+          '📝 Текущее название:',
+          listing.title ?? '— без названия —',
+          '',
+          'Отправьте новое название (5–120 символов). Команды: /back — вернуться в меню, /cancel — выйти в главное меню.'
+        ].join('\n')
+      )
+    },
+    onMessage: async (ctx, runtime, message) => {
+      const lower = message.lower ?? ''
+      if (CANCEL_KEYWORDS.includes(lower)) {
+        await clearStateRecord(runtime.user.userId)
+        await ctx.reply('Редактирование отменено.')
+        await sendMainMenu(ctx)
+        return
+      }
+      if (BACK_KEYWORDS.includes(lower)) {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const listingId = runtime.payload?.my?.editingId
+      const title = message.text?.trim?.() ?? ''
+      if (title.length < 5 || title.length > 120) {
+        await ctx.reply('Название должно быть от 5 до 120 символов. Попробуйте ещё раз.')
+        return
+      }
+
+      const updated = await updateListingTitle(listingId, runtime.user.userId, title)
+      if (!updated) {
+        await ctx.reply('Не удалось обновить название. Попробуйте позже.')
+        return
+      }
+
+      const nextPayload = withMyPayload(runtime, my => {
+        if (Array.isArray(my.items)) {
+          const item = my.items.find(entry => entry.id === listingId)
+          if (item) {
+            item.title = title.trim()
+          }
+        }
+      })
+
+      await ctx.reply('Название обновлено ✅')
+      await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+    }
+  }
+}
+
+function createMyEditCategoryHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+
+      const rows = []
+      for (let i = 0; i < CATEGORY_OPTIONS.length; i += 2) {
+        const slice = CATEGORY_OPTIONS.slice(i, i + 2).map(option =>
+          button.callback(`${option.emoji} ${option.title}`, buildFlowPayload(FLOWS.MY, 'category_select', option.id))
+        )
+        rows.push(slice)
+      }
+      rows.push([button.callback('⬅️ Назад', buildFlowPayload(FLOWS.MY, 'back_to_menu'))])
+
+      await ctx.reply(
+        [
+          `Текущая категория: ${describeCategory(listing.category)}`,
+          '',
+          'Выберите новую категорию из списка ниже.'
+        ].join('\n'),
+        { attachments: [inlineKeyboard(rows)] }
+      )
+    },
+    onMessage: async ctx => {
+      await ctx.reply('Используйте кнопки категорий или /back, чтобы вернуться.')
+    },
+    onCallback: async (ctx, runtime, parsed) => {
+      if (parsed.action === 'category_select') {
+        const option = CATEGORY_OPTIONS.find(item => item.id === parsed.value)
+        if (!option) {
+          await safeAnswerOnCallback(ctx, { notification: 'Неизвестная категория' })
+          return
+        }
+        const listingId = runtime.payload?.my?.editingId
+        const updated = await updateListingCategory(listingId, runtime.user.userId, option.id)
+        if (!updated) {
+          await safeAnswerOnCallback(ctx, { notification: 'Не удалось обновить категорию' })
+          return
+        }
+        const nextPayload = withMyPayload(runtime, my => {
+          if (Array.isArray(my.items)) {
+            const item = my.items.find(entry => entry.id === listingId)
+            if (item) {
+              item.category = option.id
+            }
+          }
+        })
+        await safeAnswerOnCallback(ctx, { notification: `${option.emoji} ${option.title}` })
+        await ctx.reply('Категория обновлена ✅')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+        return
+      }
+
+      if (parsed.action === 'back_to_menu') {
+        await safeAnswerOnCallback(ctx, { notification: 'Назад' })
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      await safeAnswerOnCallback(ctx, { notification: 'Выберите категорию из списка' })
+    }
+  }
+}
+
+function createMyEditOccurredHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+
+      await ctx.reply(
+        [
+          `Текущее время события: ${formatDateTime(listing.occurred_at)}`,
+          '',
+          'Отправьте новую дату и время (пример: «13 ноября 18:30»). Можно указать «сегодня 14:00», «вчера 20:15» или написать /skip, чтобы очистить поле.',
+          '',
+          'Команды: /back — вернуться в меню, /cancel — выйти в главное меню.'
+        ].join('\n')
+      )
+    },
+    onMessage: async (ctx, runtime, message) => {
+      const lower = message.lower ?? ''
+      if (CANCEL_KEYWORDS.includes(lower)) {
+        await clearStateRecord(runtime.user.userId)
+        await ctx.reply('Редактирование отменено.')
+        await sendMainMenu(ctx)
+        return
+      }
+
+      if (BACK_KEYWORDS.includes(lower)) {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const listingId = runtime.payload?.my?.editingId
+      if (isSkipCommand(lower)) {
+        const updated = await updateListingOccurredAt(listingId, runtime.user.userId, null)
+        if (!updated) {
+          await ctx.reply('Не удалось очистить дату. Попробуйте позже.')
+          return
+        }
+        const nextPayload = withMyPayload(runtime, my => {
+          if (Array.isArray(my.items)) {
+            const item = my.items.find(entry => entry.id === listingId)
+            if (item) {
+              item.occurred_at = null
+            }
+          }
+        })
+        await ctx.reply('Дата события очищена.')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+        return
+      }
+
+      const parsedDate = parseDateTimeInput(message.text)
+      if (!parsedDate) {
+        await ctx.reply('Не удалось распознать дату и время. Попробуйте ещё раз в формате «13 ноября 18:30».')
+        return
+      }
+
+      const updated = await updateListingOccurredAt(listingId, runtime.user.userId, parsedDate)
+      if (!updated) {
+        await ctx.reply('Не удалось обновить дату. Попробуйте позже.')
+        return
+      }
+
+      const nextPayload = withMyPayload(runtime, my => {
+        if (Array.isArray(my.items)) {
+          const item = my.items.find(entry => entry.id === listingId)
+          if (item) {
+            item.occurred_at = parsedDate.toISOString()
+          }
+        }
+      })
+
+      await ctx.reply(`Дата события обновлена: ${formatDateTime(parsedDate)} ✅`)
+      await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+    }
+  }
+}
+
+function createMyEditLocationHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+
+      const lines = [
+        '📍 Локация объявления',
+        `Широта: ${formatCoordinate(listing.lat)}`,
+        `Долгота: ${formatCoordinate(listing.lng)}`,
+        '',
+        'Отправьте новую геопозицию через вложение или напишите /skip, чтобы очистить координаты.',
+        '',
+        'Команды: /back — вернуться в меню, /cancel — выйти в главное меню.'
+      ]
+
+      await ctx.reply(lines.join('\n'))
+    },
+    onMessage: async (ctx, runtime, message) => {
+      const lower = message.lower ?? ''
+      if (CANCEL_KEYWORDS.includes(lower)) {
+        await clearStateRecord(runtime.user.userId)
+        await ctx.reply('Редактирование отменено.')
+        await sendMainMenu(ctx)
+        return
+      }
+
+      if (BACK_KEYWORDS.includes(lower)) {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const listingId = runtime.payload?.my?.editingId
+      if (isSkipCommand(lower)) {
+        const updated = await updateListingLocation(listingId, runtime.user.userId, null, null)
+        if (!updated) {
+          await ctx.reply('Не удалось очистить координаты. Попробуйте позже.')
+          return
+        }
+        const nextPayload = withMyPayload(runtime, my => {
+          if (Array.isArray(my.items)) {
+            const item = my.items.find(entry => entry.id === listingId)
+            if (item) {
+              item.lat = null
+              item.lng = null
+            }
+          }
+        })
+        await ctx.reply('Координаты очищены.')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+        return
+      }
+
+      if (message.location) {
+        const { latitude, longitude } = message.location
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          const updated = await updateListingLocation(listingId, runtime.user.userId, latitude, longitude)
+          if (!updated) {
+            await ctx.reply('Не удалось обновить координаты. Попробуйте позже.')
+            return
+          }
+          const nextPayload = withMyPayload(runtime, my => {
+            if (Array.isArray(my.items)) {
+              const item = my.items.find(entry => entry.id === listingId)
+              if (item) {
+                item.lat = latitude
+                item.lng = longitude
+              }
+            }
+          })
+          await ctx.reply('Координаты обновлены ✅')
+          await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+          return
+        }
+      }
+
+      await ctx.reply('Не удалось распознать геопозицию. Отправьте точку через вложение или напишите /skip.')
+    }
+  }
+}
+
+function createMyEditPhotosHandler() {
+  return {
+    enter: async (ctx, runtime) => {
+      const listing = await ensureEditableListing(ctx, runtime)
+      if (!listing) {
+        return
+      }
+
+      await ctx.reply(
+        [
+          '🖼 Замените фотографии объявления.',
+          '',
+          'Отправьте до трёх новых фото. Текущий набор будет полностью заменён.',
+          'Команды: /skip — оставить прежние фото, /clear — удалить все фото, /back — вернуться в меню, /cancel — выйти в главное меню.'
+        ].join('\n')
+      )
+    },
+    onMessage: async (ctx, runtime, message) => {
+      const lower = message.lower ?? ''
+      const listingId = runtime.payload?.my?.editingId
+
+      if (CANCEL_KEYWORDS.includes(lower)) {
+        await clearStateRecord(runtime.user.userId)
+        await ctx.reply('Редактирование отменено.')
+        await sendMainMenu(ctx)
+        return
+      }
+
+      if (BACK_KEYWORDS.includes(lower)) {
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      if (lower === '/clear') {
+        const updated = await replaceListingPhotos(listingId, runtime.user.userId, [])
+        if (!updated) {
+          await ctx.reply('Не удалось удалить фото. Попробуйте позже.')
+          return
+        }
+        const nextPayload = withMyPayload(runtime, my => {
+          if (Array.isArray(my.items)) {
+            const item = my.items.find(entry => entry.id === listingId)
+            if (item) {
+              item.photos = []
+            }
+          }
+        })
+        await ctx.reply('Фото удалены. ✅')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+        return
+      }
+
+      if (isSkipCommand(lower)) {
+        await ctx.reply('Фото оставлены без изменений.')
+        await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, runtime.payload, { skipIntro: true })
+        return
+      }
+
+      const attachments = extractPhotoAttachments(ctx.message)
+      if (!attachments.length) {
+        await ctx.reply('Прикрепите до трёх фотографий или используйте /skip, чтобы ничего не менять.')
+        return
+      }
+
+      const photoUrls = attachments
+        .slice(0, 3)
+        .map(attachment => extractPhotoUrl(attachment))
+        .filter(Boolean)
+
+      if (!photoUrls.length) {
+        await ctx.reply('Не удалось обработать вложения. Попробуйте снова или используйте /skip.')
+        return
+      }
+
+      const updated = await replaceListingPhotos(listingId, runtime.user.userId, photoUrls)
+      if (!updated) {
+        await ctx.reply('Не удалось обновить фото. Попробуйте позже.')
+        return
+      }
+
+      const nextPayload = withMyPayload(runtime, my => {
+        if (Array.isArray(my.items)) {
+          const item = my.items.find(entry => entry.id === listingId)
+          if (item) {
+            item.photos = photoUrls
+          }
+        }
+      })
+
+      await ctx.reply('Новые фото загружены ✅')
+      await transitionToStep(ctx, runtime.user, STEPS.MY_EDIT_MENU, nextPayload, { skipIntro: true })
+    }
+  }
+}
+
+async function ensureEditableListing(ctx, runtime) {
+  const listingId = runtime.payload?.my?.editingId
+  if (!listingId) {
+    await ctx.reply('Не выбрано объявление для редактирования.')
+    await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, runtime.payload, { skipIntro: true })
+    return null
+  }
+
+  const listing = await fetchListingForOwner(listingId, runtime.user.userId)
+  if (!listing) {
+    await ctx.reply('Карточка не найдена или уже удалена.')
+    const nextPayload = withMyPayload(runtime, my => {
+      my.editingId = null
+    })
+    await transitionToStep(ctx, runtime.user, STEPS.MY_LIST, nextPayload, { skipIntro: true })
+    return null
+  }
+
+  return listing
+}
+
+async function updateListingTitle(listingId, userId, title) {
+  if (!listingId || !userId) {
+    return false
+  }
+  const trimmed = title.trim()
+  if (!trimmed) {
+    return false
+  }
+  const [result] = await pool.query(
+    'UPDATE listings SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [trimmed, listingId, userId]
+  )
+  return result.affectedRows > 0
+}
+
+async function updateListingCategory(listingId, userId, categoryId) {
+  if (!listingId || !userId || !categoryId) {
+    return false
+  }
+  const normalized = normalizeCategoryId(categoryId)
+  const option = CATEGORY_OPTIONS.find(option => option.id === normalized)
+  if (!option) {
+    return false
+  }
+  const [result] = await pool.query(
+    'UPDATE listings SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [normalized, listingId, userId]
+  )
+  return result.affectedRows > 0
+}
+
+async function updateListingOccurredAt(listingId, userId, date) {
+  if (!listingId || !userId) {
+    return false
+  }
+  const value = date ? formatMysqlDatetime(date) : null
+  const [result] = await pool.query(
+    'UPDATE listings SET occurred_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [value, listingId, userId]
+  )
+  return result.affectedRows > 0
+}
+
+async function updateListingLocation(listingId, userId, lat, lng) {
+  if (!listingId || !userId) {
+    return false
+  }
+  const latitude = Number.isFinite(Number(lat)) ? Number(lat) : null
+  const longitude = Number.isFinite(Number(lng)) ? Number(lng) : null
+  const [result] = await pool.query(
+    'UPDATE listings SET lat = ?, lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
+    [latitude, longitude, listingId, userId]
+  )
+  return result.affectedRows > 0
+}
+
+async function replaceListingPhotos(listingId, userId, photoUrls) {
+  if (!listingId || !userId || !Array.isArray(photoUrls)) {
+    return false
+  }
+  const [ownerRows] = await pool.query(
+    'SELECT 1 FROM listings WHERE id = ? AND author_id = ? LIMIT 1',
+    [listingId, userId]
+  )
+  if (ownerRows.length === 0) {
+    return false
+  }
+
+  await pool.query('DELETE FROM photos WHERE listing_id = ?', [listingId])
+
+  for (const url of photoUrls.slice(0, 3)) {
+    await pool.query('INSERT INTO photos (id, listing_id, url) VALUES (?,?,?)', [crypto.randomUUID(), listingId, url])
+  }
+
+  await pool.query('UPDATE listings SET updated_at = CURRENT_TIMESTAMP WHERE id = ? LIMIT 1', [listingId])
+  return true
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Flex, Panel, Typography } from '@maxhub/max-ui'
 import { useOutletContext } from 'react-router-dom'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 
@@ -161,14 +162,30 @@ export default function MapPage() {
   }
 
   return (
-    <section className="map-wrapper">
-      <header className="map-wrapper__header">
-        <h1>Карта потерянных и найденных вещей</h1>
-        <p>Нажмите на маркер, чтобы перейти к карточке объявления.</p>
-      </header>
-      {status.loading && <div className="map-wrapper__status">Загружаем точки...</div>}
-      {status.error && <div className="map-wrapper__status map-wrapper__status--error">{status.error}</div>}
-      <div id="map" className="map-wrapper__canvas" />
+    <section className="lf-section">
+      <Panel mode="secondary" className="lf-section__panel">
+        <Flex direction="column" gap={6}>
+          <Typography.Title variant="medium-strong">Карта потерянных и найденных</Typography.Title>
+          <Typography.Body variant="medium" className="lf-section__subtitle">
+            Маркеры окрашены по типу объявления, нажмите чтобы увидеть карточку и перейти к полному описанию.
+          </Typography.Body>
+        </Flex>
+      </Panel>
+
+      {status.loading && (
+        <Panel mode="secondary" className="lf-state">
+          <Typography.Body variant="medium">Загружаем точки...</Typography.Body>
+        </Panel>
+      )}
+      {status.error && (
+        <Panel mode="secondary" className="lf-state lf-state--error">
+          <Typography.Body variant="medium">{status.error}</Typography.Body>
+        </Panel>
+      )}
+
+      <Panel mode="primary" className="lf-map">
+        <div id="map" className="lf-map__canvas" />
+      </Panel>
     </section>
   )
 }

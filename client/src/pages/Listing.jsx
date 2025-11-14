@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Button, Flex, Grid, Panel, Typography } from '@maxhub/max-ui'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
@@ -47,81 +48,121 @@ export default function ListingPage() {
   const createdAt = listing?.created_at ? dateFormatter.format(new Date(listing.created_at)) : null
 
   return (
-    <section className="listing-page">
-      <Link to="/" className="listing-page__back">
-        ← Вернуться к ленте
-      </Link>
+    <section className="lf-section">
+      <Button asChild mode="secondary" appearance="neutral-themed" size="medium" className="lf-back">
+        <Link to="/">← Вернуться к ленте</Link>
+      </Button>
 
-      {status.loading && <div className="listing-page__state">Загружаем данные...</div>}
-      {status.error && <div className="listing-page__state listing-page__state--error">{status.error}</div>}
+      {status.loading && (
+        <Panel mode="secondary" className="lf-state">
+          <Typography.Body variant="medium">Загружаем данные...</Typography.Body>
+        </Panel>
+      )}
+      {status.error && (
+        <Panel mode="secondary" className="lf-state lf-state--error">
+          <Typography.Body variant="medium">{status.error}</Typography.Body>
+        </Panel>
+      )}
 
       {listing && !status.loading && !status.error && (
-        <article className="listing-card">
-          <header className="listing-card__header">
-            {typeMeta && (
-              <span className="listing-card__badge" style={{ background: typeMeta.tint, color: typeMeta.color }}>
-                {typeMeta.label}
-              </span>
+        <Panel mode="primary" className="lf-listing">
+          <Flex direction="column" gap={24}>
+            <Flex direction="column" gap={16}>
+              <Flex gap={12} align="center" wrap="wrap">
+                {typeMeta && (
+                  <span className="lf-card__badge" style={{ background: typeMeta.tint, color: typeMeta.color }}>
+                    {typeMeta.label}
+                  </span>
+                )}
+                {categoryMeta && (
+                  <Typography.Label variant="medium-strong">
+                    <span aria-hidden="true">{categoryMeta.emoji}</span> {categoryMeta.label}
+                  </Typography.Label>
+                )}
+              </Flex>
+              <Typography.Title variant="large-strong" asChild>
+                <h1 className="lf-listing__title">{listing.title}</h1>
+              </Typography.Title>
+              <Flex gap={16} wrap="wrap" className="lf-listing__meta">
+                {occurredAt && (
+                  <Typography.Body variant="medium">Произошло: {occurredAt}</Typography.Body>
+                )}
+                {createdAt && (
+                  <Typography.Body variant="medium">Добавлено: {createdAt}</Typography.Body>
+                )}
+              </Flex>
+            </Flex>
+
+            {listing.description && (
+              <section className="lf-listing__section">
+                <Typography.Title variant="small-strong" asChild>
+                  <h2>Описание</h2>
+                </Typography.Title>
+                <Typography.Body variant="medium" className="lf-listing__text">
+                  {listing.description}
+                </Typography.Body>
+              </section>
             )}
-            <h1>{listing.title}</h1>
-            <div className="listing-card__meta">
-              {categoryMeta && (
-                <span className="listing-card__meta-item">
-                  <span aria-hidden="true">{categoryMeta.emoji}</span> {categoryMeta.label}
-                </span>
-              )}
-              {occurredAt && <span className="listing-card__meta-item">Произошло: {occurredAt}</span>}
-              {createdAt && <span className="listing-card__meta-item">Добавлено: {createdAt}</span>}
-            </div>
-          </header>
 
-          {listing.description && (
-            <section className="listing-card__section">
-              <h2>Описание</h2>
-              <p>{listing.description}</p>
-            </section>
-          )}
+            {(listing.lat !== null || listing.lng !== null || listing.location_note) && (
+              <section className="lf-listing__section">
+                <Typography.Title variant="small-strong" asChild>
+                  <h2>Локация</h2>
+                </Typography.Title>
+                <Grid cols={2} gap={16} className="lf-listing__grid">
+                  <div>
+                    <Typography.Label variant="medium-strong">Комментарий</Typography.Label>
+                    <Typography.Body variant="medium" className="lf-listing__text">
+                      {listing.location_note || 'Не указана'}
+                    </Typography.Body>
+                  </div>
+                  {(listing.lat !== null || listing.lng !== null) && (
+                    <div>
+                      <Typography.Label variant="medium-strong">Координаты</Typography.Label>
+                      <Typography.Body variant="medium" className="lf-listing__text">
+                        {listing.lat?.toFixed?.(5) ?? '—'} / {listing.lng?.toFixed?.(5) ?? '—'}
+                      </Typography.Body>
+                      <Button
+                        asChild
+                        size="medium"
+                        mode="secondary"
+                        appearance="neutral-themed"
+                        className="lf-listing__link"
+                      >
+                        <a
+                          href={`https://yandex.ru/maps/?ll=${listing.lng},${listing.lat}&z=16`}
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          Открыть в Яндекс.Картах
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </Grid>
+              </section>
+            )}
 
-          {(listing.lat !== null || listing.lng !== null || listing.location_note) && (
-            <section className="listing-card__section listing-card__section--grid">
-              <div>
-                <h3>Локация</h3>
-                {listing.location_note ? <p>{listing.location_note}</p> : <p>Не указана</p>}
-              </div>
-              {(listing.lat !== null || listing.lng !== null) && (
-                <div>
-                  <h3>Координаты</h3>
-                  <p>
-                    {listing.lat?.toFixed?.(5) ?? '—'} / {listing.lng?.toFixed?.(5) ?? '—'}
-                  </p>
-                  <a
-                    className="listing-card__link"
-                    href={`https://yandex.ru/maps/?ll=${listing.lng},${listing.lat}&z=16`}
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Открыть в Яндекс.Картах
-                  </a>
+            {Array.isArray(listing.photos) && listing.photos.length > 0 && (
+              <section className="lf-listing__section">
+                <Typography.Title variant="small-strong" asChild>
+                  <h2>Фото</h2>
+                </Typography.Title>
+                <div className="lf-photos">
+                  {listing.photos.map((url, index) => (
+                    <img key={index} src={url} alt={`Фото ${index + 1}`} loading="lazy" />
+                  ))}
                 </div>
-              )}
-            </section>
-          )}
+              </section>
+            )}
 
-          {Array.isArray(listing.photos) && listing.photos.length > 0 && (
-            <section className="listing-card__section">
-              <h2>Фото</h2>
-              <div className="listing-card__photos">
-                {listing.photos.map((url, index) => (
-                  <img key={index} src={url} alt={`Фото ${index + 1}`} loading="lazy" />
-                ))}
-              </div>
-            </section>
-          )}
-
-          <footer className="listing-card__footer">
-            <p>Обращайтесь через чат-бота MAX, чтобы уточнить детали и пройти проверку владельца.</p>
-          </footer>
-        </article>
+            <Panel mode="secondary" className="lf-callout">
+              <Typography.Body variant="medium">
+                Обращайтесь через чат-бота MAX, чтобы уточнить детали и пройти проверку владельца.
+              </Typography.Body>
+            </Panel>
+          </Flex>
+        </Panel>
       )}
     </section>
   )

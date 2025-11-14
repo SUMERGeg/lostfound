@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
+import { Button, Flex, Grid, Panel, Typography } from '@maxhub/max-ui'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
@@ -53,47 +54,88 @@ export default function HomePage() {
   }, [filters.type, filters.category])
 
   return (
-    <section className="feed">
-      <header className="feed__header">
-        <h1>Лента объявлений</h1>
-        <p>Свежие находки и потери. Выберите карточку, чтобы посмотреть детали.</p>
-      </header>
+    <section className="lf-section">
+      <Panel mode="secondary" className="lf-section__panel">
+        <Flex direction="column" gap={6}>
+          <Typography.Title variant="medium-strong">Лента объявлений</Typography.Title>
+          <Typography.Body variant="medium" className="lf-section__subtitle">
+            Свежие находки и потери снизу сверху, фильтруйте и открывайте детали, чтобы связаться с автором через бота.
+          </Typography.Body>
+        </Flex>
+      </Panel>
 
-      {loading && <div className="feed__state">Загружаем данные...</div>}
-      {error && <div className="feed__state feed__state--error">{error}</div>}
+      {loading && (
+        <Panel mode="secondary" className="lf-state">
+          <Typography.Body variant="medium">Загружаем данные...</Typography.Body>
+        </Panel>
+      )}
+      {error && (
+        <Panel mode="secondary" className="lf-state lf-state--error">
+          <Typography.Body variant="medium">{error}</Typography.Body>
+        </Panel>
+      )}
       {!loading && !error && items.length === 0 && (
-        <div className="feed__state">По выбранным фильтрам ничего не найдено.</div>
+        <Panel mode="secondary" className="lf-state">
+          <Typography.Body variant="medium">
+            По выбранным фильтрам ничего не найдено. Попробуйте расширить поиск.
+          </Typography.Body>
+        </Panel>
       )}
 
-      <div className="feed__grid">
+      <Grid gap={40} cols={3} className="lf-feed">
         {items.map(item => {
           const meta = getCategoryMeta(item.category)
           const typeMeta = TYPE_META[item.type] ?? { label: item.type, color: '#64748b', tint: '#e2e8f0' }
           const dateSource = item.occurred_at || item.created_at
           const when = dateSource ? formatter.format(new Date(dateSource)) : 'время не указано'
 
+          const previewPhoto = Array.isArray(item.photos) && item.photos.length > 0 ? item.photos[0] : null
+
           return (
-            <article key={item.id} className="feed-card">
-              <div className="feed-card__badge" style={{ background: typeMeta.tint, color: typeMeta.color }}>
-                {typeMeta.label}
-              </div>
-              <h2 className="feed-card__title">{item.title}</h2>
-              <div className="feed-card__subtitle">
-                <span className="feed-card__category">
-                  <span aria-hidden="true">{meta.emoji}</span> {meta.label}
+            <Panel key={item.id} mode="primary" className="lf-card">
+              <div className="lf-card__top">
+                <span className="lf-card__status-pill" style={{ color: typeMeta.color, background: typeMeta.tint }}>
+                  {typeMeta.label}
                 </span>
-                <span className="feed-card__time">{when}</span>
+                <span className="lf-card__time">{when}</span>
               </div>
-              {item.description && <p className="feed-card__description">{item.description}</p>}
-              <footer className="feed-card__footer">
-                <Link to={`/listing/${item.id}`} className="feed-card__link">
-                  Открыть карточку
-                </Link>
-              </footer>
-            </article>
+              <Flex direction="column" gap={12} className="lf-card__content">
+                <Typography.Title variant="small-strong" asChild>
+                  <h2 className="lf-card__title">{item.title}</h2>
+                </Typography.Title>
+                {item.description && (
+                  <Typography.Body variant="medium" className="lf-card__excerpt">
+                    {item.description}
+                  </Typography.Body>
+                )}
+                <Typography.Body variant="medium" className="lf-card__category">
+                  <span aria-hidden="true">{meta.emoji}</span> {meta.label}
+                </Typography.Body>
+                <Button asChild size="medium" mode="primary" appearance="themed" className="lf-card__cta">
+                  <Link to={`/listing/${item.id}`}>Открыть карточку</Link>
+                </Button>
+              </Flex>
+              <Flex direction="column" align="stretch" gap={12} className="lf-card__media">
+                <div
+                  className={previewPhoto ? 'lf-card__photo' : 'lf-card__photo lf-card__photo--empty'}
+                  style={previewPhoto ? undefined : { background: typeMeta.tint, color: typeMeta.color }}
+                >
+                  {previewPhoto ? (
+                    <img src={previewPhoto} alt={item.title} loading="lazy" />
+                  ) : (
+                    <div className="lf-card__photo-placeholder">
+                      <span aria-hidden="true" className="lf-card__placeholder-emoji">
+                        {meta.emoji}
+                      </span>
+                      <span className="lf-card__placeholder-text">Фото пока нет</span>
+                    </div>
+                  )}
+                </div>
+              </Flex>
+            </Panel>
           )
         })}
-      </div>
+      </Grid>
     </section>
   )
 }
