@@ -100,6 +100,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notifications_chat (chat_id, status)
 );
 
+CREATE TABLE IF NOT EXISTS volunteer_assignments (
+  id              VARCHAR(36) PRIMARY KEY,
+  listing_id      VARCHAR(36) NOT NULL,
+  volunteer_id    VARCHAR(36) NOT NULL,
+  status          ENUM('ACTIVE','COMPLETED','CANCELLED') DEFAULT 'ACTIVE',
+  owner_notified_at     TIMESTAMP NULL,
+  volunteer_notified_at TIMESTAMP NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_assignment (listing_id, volunteer_id),
+  INDEX idx_assignment_listing (listing_id, status),
+  INDEX idx_assignment_volunteer (volunteer_id, status)
+);
+
 CREATE TABLE IF NOT EXISTS states (
   user_id     VARCHAR(36) PRIMARY KEY,
   step        VARCHAR(64) NOT NULL,

@@ -2818,7 +2818,7 @@ function formatContactAnnouncement(roleLabel, contact, options = {}) {
     return `📇 Контакт ${roleLabel}: пока нет данных. Попробуйте запросить повторно или свяжитесь через мини-приложение.`
   }
 
-  const parts = [`📇 Контакт ${roleLabel}:`, `• MAX ID: ${contact.max_id ?? 'не указан'}`]
+  const parts = [`📇 Контакт ${roleLabel}:`]
 
   if (contact.phone) {
     const phoneText = maskPhone ? maskPhoneValue(contact.phone) : contact.phone
@@ -2984,6 +2984,8 @@ function getDefaultNotificationTitle(type) {
       return 'Новое объявление'
     case NotificationType.VOLUNTEER_ASSIGNED:
       return 'Волонтёр откликнулся'
+    case NotificationType.VOLUNTEER_ACTIVE:
+      return 'Вы на задании'
     case NotificationType.MATCH_FOUND:
       return 'Появилось совпадение'
     default:
@@ -3270,6 +3272,17 @@ async function handleVolunteerAcceptAction(ctx, runtime, value) {
     return
   }
 
+  const existingAssignment = await findActiveVolunteerAssignment(listingId, runtime.user.userId)
+  if (existingAssignment) {
+    await ctx.reply(
+      [
+        `Вы уже отметились готовым помогать по объявлению «${listingTitle}».`,
+        'Контакт владельца и детали сохранены в уведомлениях. Если нужно уточнить статус — свяжитесь напрямую или дождитесь ответа владельца.'
+      ].join('\n')
+    )
+    return
+  }
+
   const ownerContact = await fetchUserContact(listing.author_id)
   const listingTitle = formatListingTitle(listing.title)
 
@@ -3314,6 +3327,26 @@ async function handleVolunteerAcceptAction(ctx, runtime, value) {
   await saveStateRecord(runtime.user.userId, STEPS.VOLUNTEER_LIST, updatedPayload)
   const updatedRuntime = { ...runtime, payload: updatedPayload }
 
+  await createVolunteerAssignmentRecord({
+    listingId,
+    volunteerId: runtime.user.userId
+  })
+
+  await createNotification({
+    userId: runtime.user.userId,
+    type: NotificationType.VOLUNTEER_ACTIVE,
+    listingId,
+    title: `Вы помогаете по «${listingTitle}»`,
+    body: formatContactAnnouncement('владельца', ownerContact, {
+      postscript: 'Сохраните контакт и сообщите, когда завершите поиск.'
+    }),
+    status: NotificationStatus.UNREAD,
+    payload: {
+      listingId,
+      ownerId: listing.author_id
+    }
+  })
+
   await sendVolunteerListings(ctx, updatedRuntime, { refresh: true })
 }
 
@@ -3339,6 +3372,48 @@ function buildVolunteerLocationKeyboard() {
   return inlineKeyboard([[button.callback('⤴️ Без гео', buildFlowPayload(FLOWS.VOLUNTEER, 'location_skip'))]])
 }
 
+async function findActiveVolunteerAssignment(listingId, volunteerId) {
+  if (!listingId || !volunteerId) {
+    return null
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM volunteer_assignments
+     WHERE listing_id = ?
+       AND volunteer_id = ?
+       AND status = 'ACTIVE'
+     LIMIT 1`,
+    [listingId, volunteerId]
+  )
+
+  if (rows.length === 0) {
+    return null
+  }
+
+  return rows[0]
+}
+
+async function createVolunteerAssignmentRecord({ listingId, volunteerId }) {
+  if (!listingId || !volunteerId) {
+    return null
+  }
+
+  const assignmentId = crypto.randomUUID()
+  await pool.query(
+    `INSERT INTO volunteer_assignments (id, listing_id, volunteer_id, status, owner_notified_at, volunteer_notified_at)
+     VALUES (?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       status = 'ACTIVE',
+       owner_notified_at = VALUES(owner_notified_at),
+       volunteer_notified_at = VALUES(volunteer_notified_at),
+       updated_at = CURRENT_TIMESTAMP`,
+    [assignmentId, listingId, volunteerId]
+  )
+
+  return assignmentId
+}
+
 async function userHasListingAccess(userId, listingId) {
   if (!userId || !listingId) {
     return false
@@ -3360,7 +3435,8 @@ async function userHasListingAccess(userId, listingId) {
       NotificationType.OWNER_REVIEW,
       NotificationType.OWNER_WAITING,
       NotificationType.LISTING_PUBLISHED,
-      NotificationType.VOLUNTEER_ASSIGNED
+      NotificationType.VOLUNTEER_ASSIGNED,
+      NotificationType.VOLUNTEER_ACTIVE
     ]
   )
 

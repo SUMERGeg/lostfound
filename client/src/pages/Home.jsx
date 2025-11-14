@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
-import { Button, Flex, Grid, Panel, Typography } from '@maxhub/max-ui'
+import { Button, Flex, Panel, Typography } from '@maxhub/max-ui'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
@@ -82,16 +82,18 @@ export default function HomePage() {
         </Panel>
       )}
 
-      <Grid gap={40} cols={3} className="lf-feed">
+      <div className="lf-feed">
         {items.map(item => {
           const meta = getCategoryMeta(item.category)
           const typeMeta = TYPE_META[item.type] ?? { label: item.type, color: '#64748b', tint: '#e2e8f0' }
           const dateSource = item.occurred_at || item.created_at
           const when = dateSource ? formatter.format(new Date(dateSource)) : 'время не указано'
 
-          const previewPhoto = Array.isArray(item.photos) && item.photos.length > 0 ? item.photos[0] : null
+          const previewPhoto =
+            item.preview_photo ||
+            (Array.isArray(item.photos) && item.photos.length > 0 ? item.photos[0] : null)
 
-          return (
+  return (
             <Panel key={item.id} mode="primary" className="lf-card">
               <div className="lf-card__top">
                 <span className="lf-card__status-pill" style={{ color: typeMeta.color, background: typeMeta.tint }}>
@@ -123,19 +125,16 @@ export default function HomePage() {
                   {previewPhoto ? (
                     <img src={previewPhoto} alt={item.title} loading="lazy" />
                   ) : (
-                    <div className="lf-card__photo-placeholder">
-                      <span aria-hidden="true" className="lf-card__placeholder-emoji">
-                        {meta.emoji}
-                      </span>
-                      <span className="lf-card__placeholder-text">Фото пока нет</span>
+                    <div className="lf-card__photo-placeholder" aria-hidden="true">
+                      <span className="lf-card__placeholder-emoji">{meta.emoji}</span>
                     </div>
                   )}
-                </div>
+    </div>
               </Flex>
             </Panel>
           )
         })}
-      </Grid>
+      </div>
     </section>
   )
 }

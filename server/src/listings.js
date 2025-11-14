@@ -21,9 +21,28 @@ listings.get('/', async (req, res) => {
   }
 
   const [rows] = await pool.query(
-    `SELECT id,type,category,title,description,lat,lng,occurred_at,created_at 
-     FROM listings WHERE ${where} 
-     ORDER BY created_at DESC LIMIT ?`, [...params, Number(limit)]
+    `SELECT
+       id,
+       type,
+       category,
+       title,
+       description,
+       lat,
+       lng,
+       occurred_at,
+       created_at,
+       (
+         SELECT url
+         FROM photos
+         WHERE listing_id = listings.id
+         ORDER BY created_at ASC
+         LIMIT 1
+       ) AS preview_photo
+     FROM listings
+     WHERE ${where}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [...params, Number(limit)]
   );
   res.json(rows);
 });
