@@ -1,7 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [
     {
       "source": "/(.*)",
@@ -10,7 +8,7 @@
         { "key": "X-Frame-Options", "value": "ALLOWALL" },
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru https://oauth.vk.com https://id.vk.com https://*.vk-apps.ru;"
+          "value": "frame-ancestors 'self' https://vk.com https://m.vk.com https://vk.ru https://m.vk.ru https://*.vk.com https://*.vk.ru https://oauth.vk.com https://id.vk.com https://login.vk.com https://*.vk-apps.com https://*.vk-apps.ru https://*.vk-app.ru https://*.vk-apis.com https://*.vk-cdn.ru https://max.ru https://*.max.ru https://*.platform-ws.ru https://*.vkteam.dev https://*.userapi.com;"
         },
         { "key": "X-XSS-Protection", "value": "1; mode=block" }
       ]
