@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { Flex, Panel, Typography } from '@maxhub/max-ui'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Panel, Typography } from '../components/ui.jsx'
 import { useOutletContext } from 'react-router-dom'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
+import { apiRequest } from '../api.js'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const initialFilters = { type: '', category: '' }
 
 function escapeHtml(input = '') {
@@ -22,56 +22,15 @@ export default function MapPage() {
   const requestIdRef = useRef(0)
   const outletContext = useOutletContext() ?? { filters: initialFilters }
   const filters = outletContext.filters ?? initialFilters
+  const filterType = filters.type
+  const filterCategory = filters.category
+  const filtersRef = useRef(filters)
+  filtersRef.current = filters
   const [status, setStatus] = useState({ loading: false, error: null })
 
-  useEffect(() => {
-    if (typeof ymaps === 'undefined') {
-      console.error('Yandex Maps API не загружен')
-      setStatus({ loading: false, error: 'Yandex Maps API не загрузился. Проверьте ключ.' })
-      return
-    }
-
-    let destroyed = false
-    ymaps.ready(() => {
-      if (destroyed) return
-
-      const map = new ymaps.Map('map', {
-        center: [55.751244, 37.618423],
-        zoom: 11,
-        controls: ['zoomControl', 'geolocationControl']
-      })
-      const clusterer = new ymaps.Clusterer({
-        groupByCoordinates: false,
-        clusterDisableClickZoom: false,
-        clusterOpenBalloonOnClick: false
-      })
-      map.geoObjects.add(clusterer)
-      mapRef.current = map
-      clustererRef.current = clusterer
-      loadPoints(filters)
-    })
-
-    return () => {
-      destroyed = true
-      if (mapRef.current) {
-        mapRef.current.destroy()
-        mapRef.current = null
-      }
-      clustererRef.current = null
-      markerLayoutRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!mapRef.current) {
-      return
-    }
-    loadPoints(filters)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.type, filters.category])
-
-  function ensureMarkerLayout() {
-    if (!markerLayoutRef.current && typeof ymaps !== 'undefined') {
+  const ensureMarkerLayout = useCallback(() => {
+    const ymaps = window.ymaps
+    if (!markerLayoutRef.current && ymaps) {
       markerLayoutRef.current = ymaps.templateLayoutFactory.createClass(
         '<div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:#fff;background-color:$[properties.color];box-shadow:0 8px 20px rgba(15,23,42,0.25);cursor:pointer;transform:translateZ(0);">' +
           '$[properties.emoji]' +
@@ -79,9 +38,9 @@ export default function MapPage() {
       )
     }
     return markerLayoutRef.current
-  }
+  }, [])
 
-  async function loadPoints(activeFilters) {
+  const loadPoints = useCallback(async activeFilters => {
     setStatus({ loading: true, error: null })
     requestIdRef.current += 1
     const requestId = requestIdRef.current
@@ -91,7 +50,7 @@ export default function MapPage() {
       if (activeFilters.type) params.set('type', activeFilters.type)
       if (activeFilters.category) params.set('category', activeFilters.category)
 
-      const response = await fetch(`${API_BASE}/listings?${params.toString()}`)
+      const response = await apiRequest(`/api/v1/ads?${params.toString()}`)
       if (!response.ok) {
         throw new Error(`Ошибка загрузки: ${response.status}`)
       }
@@ -111,6 +70,11 @@ export default function MapPage() {
       const markerLayout = ensureMarkerLayout()
       const origin = window.location.origin
 
+      const ymaps = window.ymaps
+      if (!ymaps) {
+        throw new Error('Yandex Maps API недоступен')
+      }
+
       const placemarks = (Array.isArray(data) ? data : [])
         .filter(item => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)))
         .map(item => {
@@ -122,7 +86,7 @@ export default function MapPage() {
               emoji: meta.emoji,
               color: typeMeta.color,
               hintContent: `${typeMeta.label} · ${meta.label}`,
-              balloonContent: `<strong>${escapeHtml(item.title)}</strong><br/>${escapeHtml(meta.label)}<br/><a href="${origin}/listing/${item.id}" target="_blank" rel="noopener">Открыть карточку</a>`
+              balloonContent: `<strong>${escapeHtml(item.title)}</strong><br/>${escapeHtml(meta.label)}<br/><a href="${origin}/ads/${item.id}" target="_blank" rel="noopener">Открыть карточку</a>`
             },
             {
               iconLayout: markerLayout,
@@ -159,19 +123,56 @@ export default function MapPage() {
       console.error('[Map] Ошибка загрузки точек', error)
       setStatus({ loading: false, error: 'Не удалось загрузить точки. Попробуйте обновить страницу.' })
     }
-  }
+  }, [ensureMarkerLayout])
+
+  useEffect(() => {
+    const ymaps = window.ymaps
+    if (!ymaps) {
+      console.error('Yandex Maps API не загружен')
+      setStatus({ loading: false, error: 'Yandex Maps API не загрузился. Проверьте ключ.' })
+      return
+    }
+
+    let destroyed = false
+    ymaps.ready(() => {
+      if (destroyed) return
+
+      const map = new ymaps.Map('map', {
+        center: [55.751244, 37.618423],
+        zoom: 11,
+        controls: ['zoomControl', 'geolocationControl']
+      })
+      const clusterer = new ymaps.Clusterer({
+        groupByCoordinates: false,
+        clusterDisableClickZoom: false,
+        clusterOpenBalloonOnClick: false
+      })
+      map.geoObjects.add(clusterer)
+      mapRef.current = map
+      clustererRef.current = clusterer
+      loadPoints(filtersRef.current)
+    })
+
+    return () => {
+      destroyed = true
+      if (mapRef.current) {
+        mapRef.current.destroy()
+        mapRef.current = null
+      }
+      clustererRef.current = null
+      markerLayoutRef.current = null
+    }
+  }, [loadPoints])
+
+  useEffect(() => {
+    if (!mapRef.current) {
+      return
+    }
+    loadPoints({ type: filterType, category: filterCategory })
+  }, [filterType, filterCategory, loadPoints])
 
   return (
-    <section className="lf-section">
-      <Panel mode="secondary" className="lf-section__panel">
-        <Flex direction="column" gap={6}>
-          <Typography.Title variant="medium-strong">Карта потерянных и найденных</Typography.Title>
-          <Typography.Body variant="medium" className="lf-section__subtitle">
-            Маркеры окрашены по типу объявления, нажмите чтобы увидеть карточку и перейти к полному описанию.
-          </Typography.Body>
-        </Flex>
-      </Panel>
-
+    <section className="lf-section lf-map-section" aria-label="Карта потерянных и найденных вещей">
       {status.loading && (
         <Panel mode="secondary" className="lf-state">
           <Typography.Body variant="medium">Загружаем точки...</Typography.Body>

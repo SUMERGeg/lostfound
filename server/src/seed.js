@@ -1,5 +1,7 @@
 import crypto from 'node:crypto'
 import { pool } from './db.js'
+import { hashPassword } from './auth/password.js'
+import { runMatchingJob } from './cron.js'
 
 const SAMPLE_PHOTO_BASE = '/sample'
 
@@ -8,13 +10,31 @@ const SAMPLE_USERS = [
     key: 'ownerIrina',
     id: crypto.randomUUID(),
     maxId: 'max.demo.irina',
-    phone: '+7 999 111-22-33'
+    email: 'irina@example.test',
+    displayName: 'Ирина',
+    phone: '+7 999 111-22-33',
+    telegram: '@demo_irina',
+    role: 'USER'
   },
   {
     key: 'ownerAnton',
     id: crypto.randomUUID(),
     maxId: 'max.demo.anton',
-    phone: '+7 900 555-66-77'
+    email: 'anton@example.test',
+    displayName: 'Антон',
+    phone: '+7 900 555-66-77',
+    telegram: '@demo_anton',
+    role: 'USER'
+  },
+  {
+    key: 'admin',
+    id: crypto.randomUUID(),
+    maxId: null,
+    email: 'admin@example.test',
+    displayName: 'Администратор',
+    phone: null,
+    telegram: null,
+    role: 'ADMIN'
   }
 ]
 
@@ -82,11 +102,44 @@ const SAMPLE_LISTINGS = [
       { question: 'Что написано на бирке?', answer: '804' },
       { question: 'Какой бренд на брелоке?', answer: 'BMW' }
     ]
+  },
+  {
+    authorKey: 'ownerIrina',
+    type: 'FOUND',
+    category: 'wear',
+    title: 'Найден тёмно-серый рюкзак Bellroy',
+    description: 'Рюкзак найден рядом со станцией МЦК «Лужники». Внешние признаки совпадают с объявлением о пропаже; содержимое не публикуется.',
+    district: 'Лужники',
+    lat: 55.7159,
+    lng: 37.5601,
+    occurredAt: '2025-11-09T23:00:00+03:00',
+    photos: [`${SAMPLE_PHOTO_BASE}/wear-backpack.png`],
+    secrets: [
+      { question: 'Какой бренд рюкзака?', answer: 'Bellroy' },
+      { question: 'Что лежало в маленьком кармане?', answer: 'AirPods и ключи' }
+    ]
   }
 ]
 
 async function truncateTables() {
   const tables = [
+    'privacy_requests',
+    'account_deletion_objects',
+    'account_deletion_jobs',
+    'audit_log',
+    'reports',
+    'match_feedback',
+    'owner_check_contacts',
+    'owner_answers',
+    'owner_checks',
+    'owner_questions',
+    'listing_contact_preferences',
+    'uploads',
+    'outbox_events',
+    'password_reset_tokens',
+    'email_verification_tokens',
+    'refresh_sessions',
+    'user_consents',
     'chat_messages',
     'chat_members',
     'chats',
@@ -107,8 +160,14 @@ async function truncateTables() {
 }
 
 async function seedUsers() {
+  const passwordHash = await hashPassword('DemoPassword!2026')
   for (const user of SAMPLE_USERS) {
-    await pool.query('INSERT INTO users (id, max_id, phone) VALUES (?,?,?)', [user.id, user.maxId, user.phone])
+    await pool.query(
+      `INSERT INTO users
+        (id, max_id, email, password_hash, display_name, phone, telegram, status, role, email_verified_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, CURRENT_TIMESTAMP)`,
+      [user.id, user.maxId, user.email, passwordHash, user.displayName, user.phone, user.telegram, user.role]
+    )
   }
 
   return SAMPLE_USERS.reduce((acc, user) => {
@@ -158,6 +217,15 @@ async function seedListings(userMap) {
         JSON.stringify(secret)
       ])
     }
+
+    if (sample.type === 'FOUND') {
+      for (const [index, secret] of (sample.secrets ?? []).slice(0, 3).entries()) {
+        await pool.query(
+          'INSERT INTO owner_questions (id, listing_id, position, prompt) VALUES (?, ?, ?, ?)',
+          [crypto.randomUUID(), listingId, index + 1, secret.question]
+        )
+      }
+    }
   }
 }
 
@@ -168,7 +236,12 @@ async function seed() {
   const userMap = await seedUsers()
   console.log('[seed] Добавляем примерные объявления…')
   await seedListings(userMap)
+  console.log('[seed] Building demo matches...')
+  await runMatchingJob()
   console.log('[seed] Готово — примеры загружены.')
+  console.log('[seed] Demo USER: anton@example.test / DemoPassword!2026')
+  console.log('[seed] Demo FOUND holder: irina@example.test / DemoPassword!2026')
+  console.log('[seed] Demo ADMIN: admin@example.test / DemoPassword!2026')
 }
 
 seed()

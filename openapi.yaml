@@ -1,0 +1,841 @@
+openapi: 3.1.0
+info:
+  title: Lost&Found API
+  version: 0.1.0
+  description: Standalone web API. Public advertisement responses never include owner contacts.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Service is running
+  /health/live:
+    get:
+      operationId: liveness
+      responses:
+        '200': { description: Process is alive }
+  /health/ready:
+    get:
+      operationId: readiness
+      responses:
+        '200': { description: API and database are ready }
+        '503': { description: Database is unavailable }
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/AuthSuccess'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuthSuccess'
+        '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      responses:
+        '200':
+          $ref: '#/components/responses/AuthSuccess'
+        '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        '204':
+          description: Refresh session revoked
+  /api/v1/auth/verify-email:
+    post:
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties: { token: { type: string } }
+      responses:
+        '200': { description: Email verified }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/verification-email:
+    post:
+      operationId: resendVerificationEmail
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Verification email queued or already verified }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '202': { description: Generic response regardless of account existence }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/reset-password:
+    post:
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '200': { description: Password changed and all sessions invalidated }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/v1/ads:
+    get:
+      operationId: listAds
+      parameters:
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/AdType' } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: lat, in: query, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: lng, in: query, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: radius, in: query, schema: { type: integer, minimum: 1, maximum: 50000, default: 5000 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: Active public advertisements
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdSummary' }
+    post:
+      operationId: createAd
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAdRequest' }
+      responses:
+        '201':
+          description: Advertisement created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties: { id: { type: string, format: uuid } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/ads/mine:
+    get:
+      operationId: listOwnAds
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: All advertisements owned by the current user, including closed ones
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/ads/mine/{id}:
+    get:
+      operationId: getOwnAd
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Owned advertisement including status }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/ads/{id}:
+    get:
+      operationId: getAd
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Public advertisement details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdDetail' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateAd
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, minLength: 1, maxLength: 255 }
+                category: { type: string, maxLength: 64 }
+                description: { type: string, maxLength: 3000 }
+                occurredAt: { type: [string, 'null'], format: date-time }
+                lat: { type: [number, 'null'], minimum: -90, maximum: 90 }
+                lng: { type: [number, 'null'], minimum: -180, maximum: 180 }
+      responses:
+        '200': { description: Owned advertisement updated }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/ads/{id}/close:
+    patch:
+      operationId: closeAd
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Owned advertisement closed }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/profile:
+    get:
+      operationId: getProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user profile including private contacts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateProfile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 120 }
+                phone: { type: [string, 'null'], maxLength: 32 }
+                telegram: { type: [string, 'null'], maxLength: 64 }
+      responses:
+        '200': { description: Profile updated }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteAccount
+      description: Atomically anonymizes live account data, invalidates all sessions and action tokens, and queues Object Storage deletion with retries.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, confirmation]
+              properties:
+                currentPassword: { type: string, format: password, minLength: 1 }
+                confirmation: { type: string, enum: [DELETE] }
+      responses:
+        '202':
+          description: Live data anonymized and Object Storage cleanup accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountDeletionResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/matches:
+    get:
+      operationId: listMatches
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Ranked active matches involving an advertisement owned by the current user
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Match' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/matches/{id}/feedback:
+    put:
+      operationId: saveMatchFeedback
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedback]
+              properties:
+                feedback: { $ref: '#/components/schemas/MatchFeedback' }
+      responses:
+        '200': { description: Feedback stored as a separate dataset row }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/owner-checks:
+    get:
+      operationId: listOwnerChecks
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Claims where the current user is holder or claimant }
+    post:
+      operationId: submitOwnerCheck
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingId, answers]
+              properties:
+                listingId: { type: string, format: uuid }
+                answers:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    type: object
+                    required: [questionId, answer]
+                    properties:
+                      questionId: { type: string, format: uuid }
+                      answer: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: Owner check submitted }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/owner-checks/questions/{listingId}:
+    get:
+      operationId: getOwnerQuestions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Public verification questions without answers }
+    put:
+      operationId: replaceOwnerQuestions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompts]
+              properties:
+                prompts: { type: array, minItems: 1, maxItems: 3, items: { type: string, minLength: 1, maxLength: 500 } }
+      responses:
+        '200': { description: Questions replaced by the FOUND ad owner }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/owner-checks/{id}:
+    get:
+      operationId: getOwnerCheck
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Owner check, answer snapshots and allowed contact type names without contact values
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/owner-checks/{id}/decision:
+    patch:
+      operationId: decideOwnerCheck
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties: { decision: { type: string, enum: [APPROVED, DECLINED] } }
+      responses:
+        '200': { description: Pending check decided by the FOUND ad owner }
+        '409': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/owner-checks/{id}/contacts:
+    get:
+      operationId: getOwnerCheckContacts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Only contact values allowed by the FOUND listing owner, snapshotted at approval. A CONTACT_DISCLOSED audit event stores type names, never values.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DisclosedContacts' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current user notifications }
+  /api/v1/notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Owned notification marked read }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/reports:
+    post:
+      operationId: createReport
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingId, reason]
+              properties:
+                listingId: { type: string, format: uuid }
+                reason: { $ref: '#/components/schemas/ReportReason' }
+                details: { type: string, maxLength: 2000 }
+      responses:
+        '201': { description: Report queued for moderation }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/privacy-requests/config:
+    get:
+      operationId: getPrivacyRequestConfig
+      responses:
+        '200':
+          description: Public operator contact configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [privacyEmail]
+                properties: { privacyEmail: { type: string } }
+  /api/v1/privacy-requests:
+    post:
+      operationId: createPrivacyRequest
+      description: Creates a data-subject request. When authenticated, the account email is used and the submitted email is ignored.
+      security: [{ bearerAuth: [] }, {}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePrivacyRequest' }
+      responses:
+        '201':
+          description: Request registered without echoing its sensitive content
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrivacyRequestReceipt' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/reports:
+    get:
+      operationId: listAdminReports
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ReportStatus' } }
+      responses:
+        '200': { description: Moderation report queue }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/reports/{id}:
+    patch:
+      operationId: updateAdminReport
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [IN_REVIEW, RESOLVED, REJECTED] }
+                resolutionNote: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Report status changed and audited }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/users:
+    get:
+      operationId: listAdminUsers
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Administrative user list }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/users/{id}:
+    patch:
+      operationId: moderateUser
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties: { action: { type: string, enum: [BLOCK, UNBLOCK] } }
+      responses:
+        '200': { description: User state changed and audited }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/ads:
+    get:
+      operationId: listAdminAds
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Administrative advertisement list }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/ads/{id}:
+    patch:
+      operationId: moderateAd
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties: { action: { type: string, enum: [HIDE, RESTORE, DELETE] } }
+      responses:
+        '200': { description: Advertisement state changed and audited }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/privacy-requests:
+    get:
+      operationId: listAdminPrivacyRequests
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PrivacyRequestStatus' } }
+      responses:
+        '200':
+          description: Data-subject request queue, restricted to administrators
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PrivacyRequest' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /api/v1/admin/privacy-requests/{id}:
+    patch:
+      operationId: updateAdminPrivacyRequest
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePrivacyRequest' }
+      responses:
+        '200': { description: Request status changed and action audited without request content }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/uploads:
+    post:
+      operationId: uploadImage
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        '201':
+          description: Pending image uploaded to Object Storage
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, url, contentType, byteSize]
+                properties:
+                  id: { type: string, format: uuid }
+                  url: { type: string, format: uri }
+                  contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+                  byteSize: { type: integer, maximum: 8388608 }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/ads/{id}/images:
+    put:
+      operationId: attachAdImages
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadIds]
+              properties:
+                uploadIds:
+                  type: array
+                  maxItems: 3
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        '200': { description: Images attached to the owned advertisement }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    AuthSuccess:
+      description: Access JWT and user profile. Refresh token is sent only as an HttpOnly cookie.
+      headers:
+        Set-Cookie:
+          schema: { type: string }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AuthResponse' }
+    Error:
+      description: Request error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    AdType: { type: string, enum: [LOST, FOUND] }
+    MatchFeedback: { type: string, enum: [CONFIRMED, SIMILAR_NOT_MINE, NOT_RELEVANT] }
+    ReportReason: { type: string, enum: [SPAM, FRAUD, INAPPROPRIATE, DUPLICATE, OTHER] }
+    ReportStatus: { type: string, enum: [OPEN, IN_REVIEW, RESOLVED, REJECTED] }
+    PrivacyRequestType: { type: string, enum: [ACCESS, CORRECTION, DELETION, WITHDRAW_CONSENT, OTHER] }
+    PrivacyRequestStatus: { type: string, enum: [NEW, IN_PROGRESS, RESOLVED, REJECTED] }
+    CreatePrivacyRequest:
+      type: object
+      required: [requestType, message]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          description: Required without authentication; ignored when a bearer token identifies an active account.
+        requestType: { $ref: '#/components/schemas/PrivacyRequestType' }
+        message: { type: string, minLength: 10, maxLength: 3000 }
+    PrivacyRequestReceipt:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, const: NEW }
+    PrivacyRequest:
+      type: object
+      required: [id, requestType, message, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: [string, 'null'], format: uuid }
+        email: { type: [string, 'null'], format: email }
+        requestType: { $ref: '#/components/schemas/PrivacyRequestType' }
+        message: { type: string }
+        status: { $ref: '#/components/schemas/PrivacyRequestStatus' }
+        resolutionNote: { type: [string, 'null'] }
+        resolvedBy: { type: [string, 'null'], format: uuid }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UpdatePrivacyRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [IN_PROGRESS, RESOLVED, REJECTED] }
+        resolutionNote: { type: string, maxLength: 2000 }
+    Match:
+      type: object
+      required: [id, score, algorithmVersion, lost, found]
+      properties:
+        id: { type: string, format: uuid }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        algorithmVersion: { type: string, example: baseline-v1 }
+        scoreBreakdown: { type: [object, 'null'], additionalProperties: true }
+        feedback: { anyOf: [{ $ref: '#/components/schemas/MatchFeedback' }, { type: 'null' }] }
+        ownsLost: { type: boolean }
+        ownsFound: { type: boolean }
+        lost: { $ref: '#/components/schemas/MatchAd' }
+        found: { $ref: '#/components/schemas/MatchAd' }
+    MatchAd:
+      type: object
+      required: [id, title, category]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        category: { type: string }
+        occurredAt: { type: [string, 'null'], format: date-time }
+        photo: { type: [string, 'null'] }
+    User:
+      type: object
+      required: [id, email, displayName, role, status]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { type: string, enum: [USER, ADMIN] }
+        status: { type: string, enum: [ACTIVE, BLOCKED, DELETED] }
+        emailVerified: { type: boolean }
+    Profile:
+      allOf:
+        - { $ref: '#/components/schemas/User' }
+        - type: object
+          properties:
+            phone: { type: [string, 'null'] }
+            telegram: { type: [string, 'null'] }
+            createdAt: { type: string, format: date-time }
+    AccountDeletionResponse:
+      type: object
+      required: [deletionId, status, queuedObjects]
+      properties:
+        deletionId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, COMPLETED] }
+        queuedObjects: { type: integer, minimum: 0 }
+    AuthResponse:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, example: 900 }
+        user: { $ref: '#/components/schemas/User' }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 12, maxLength: 128 }
+    RegisterRequest:
+      allOf:
+        - { $ref: '#/components/schemas/LoginRequest' }
+        - type: object
+          required: [displayName, consents]
+          properties:
+            displayName: { type: string, minLength: 2, maxLength: 120 }
+            consents:
+              type: array
+              minItems: 2
+              maxItems: 2
+              description: Separate acceptance of the exact current TERMS and PERSONAL_DATA document versions.
+              items: { $ref: '#/components/schemas/RegistrationConsent' }
+    RegistrationConsent:
+      type: object
+      required: [type, accepted, documentVersion]
+      properties:
+        type: { type: string, enum: [TERMS, PERSONAL_DATA] }
+        accepted: { type: boolean, const: true }
+        documentVersion:
+          type: string
+          maxLength: 128
+          examples: [terms-draft-2026-08-13.1, personal-data-draft-2026-08-13.1]
+    CreateAdRequest:
+      type: object
+      required: [type, category, title]
+      properties:
+        type: { $ref: '#/components/schemas/AdType' }
+        category: { type: string }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, maxLength: 3000 }
+        lat: { type: [number, 'null'], minimum: -90, maximum: 90 }
+        lng: { type: [number, 'null'], minimum: -180, maximum: 180 }
+        occurredAt: { type: [string, 'null'], format: date-time }
+        contactChannels:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          maxItems: 3
+          items: { $ref: '#/components/schemas/ContactChannel' }
+          description: Required for FOUND listings; ignored only when empty for LOST listings. Values themselves never appear in public ad DTOs.
+    ContactChannel:
+      type: string
+      enum: [EMAIL, PHONE, TELEGRAM]
+    DisclosedContacts:
+      type: object
+      properties:
+        email: { type: [string, 'null'], format: email }
+        phone: { type: [string, 'null'] }
+        telegram: { type: [string, 'null'] }
+      description: Non-selected channels are null and contact values are available only to approved owner-check participants.
+    AdSummary:
+      type: object
+      required: [id, type, category, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/AdType' }
+        category: { type: string }
+        title: { type: string }
+        description: { type: string }
+        lat: { type: [number, 'null'] }
+        lng: { type: [number, 'null'] }
+        occurred_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        preview_photo: { type: [string, 'null'] }
+    AdDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AdSummary' }
+        - type: object
+          properties:
+            status: { type: string, enum: [ACTIVE] }
+            district: { type: [string, 'null'] }
+            updated_at: { type: [string, 'null'], format: date-time }
+            photos: { type: array, items: { type: string } }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        message: { type: string }

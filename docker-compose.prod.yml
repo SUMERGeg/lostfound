@@ -1,0 +1,30 @@
+services:
+  server:
+    build:
+      context: ./server
+      target: production
+    env_file:
+      - path: ./server/.env
+        required: false
+    restart: unless-stopped
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  client:
+    build:
+      context: ./client
+      target: production
+      args:
+        VITE_YANDEX_MAPS_API_KEY: ${VITE_YANDEX_MAPS_API_KEY:-}
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    ports: ["8080:8080"]
+
+# Production database and Object Storage are external managed services configured in server/.env.

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Button, Flex, Grid, Panel, Typography } from '@maxhub/max-ui'
+import { Button, Flex, Grid, Panel, Typography } from '../components/ui.jsx'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
+import { apiRequest } from '../api.js'
+import { useAuth } from '../auth/AuthContext.jsx'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   day: '2-digit',
   month: 'long',
@@ -13,6 +14,7 @@ const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
 
 export default function ListingPage() {
   const { id } = useParams()
+  const { user } = useAuth()
   const [listing, setListing] = useState(null)
   const [status, setStatus] = useState({ loading: true, error: null })
 
@@ -22,7 +24,7 @@ export default function ListingPage() {
     async function load() {
       setStatus({ loading: true, error: null })
       try {
-        const response = await fetch(`${API_BASE}/listings/${id}`, { signal: controller.signal })
+        const response = await apiRequest(`/api/v1/ads/${id}`, { signal: controller.signal })
         if (!response.ok) {
           throw new Error(`Ошибка загрузки: ${response.status}`)
         }
@@ -50,7 +52,7 @@ export default function ListingPage() {
   return (
     <section className="lf-section">
       <Button asChild mode="secondary" appearance="neutral-themed" size="medium" className="lf-back">
-        <Link to="/">← Вернуться к ленте</Link>
+        <Link to="/ads">← Вернуться к ленте</Link>
       </Button>
 
       {status.loading && (
@@ -158,8 +160,10 @@ export default function ListingPage() {
 
             <Panel mode="secondary" className="lf-callout">
               <Typography.Body variant="medium">
-                Обращайтесь через чат-бота MAX, чтобы уточнить детали и пройти проверку владельца.
+                Контактные данные откроются только после успешной проверки владельца.
               </Typography.Body>
+              {listing.type === 'FOUND' && <Button asChild size="medium"><Link to={`/ads/${listing.id}/claim`}>Это моя вещь</Link></Button>}
+              {user && <Button asChild size="medium" mode="secondary"><Link to={`/ads/${listing.id}/report`}>Пожаловаться</Link></Button>}
             </Panel>
           </Flex>
         </Panel>

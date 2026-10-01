@@ -5,6 +5,16 @@ import { ensureUser } from './users.js'
 import { encryptSecrets, decryptSecret } from './security.js'
 import { score as computeMatchScore } from './matching.js'
 import {
+  createListing,
+  replaceListingPhotos,
+  toggleListingStatus,
+  updateListingCategory,
+  updateListingDescription,
+  updateListingLocation,
+  updateListingOccurredAt,
+  updateListingTitle
+} from './listingService.js'
+import {
   getOrCreateOwnerCheckChat,
   updateChatStatus,
   fetchChatById,
@@ -4065,7 +4075,7 @@ async function publishListing(runtime) {
     throw new Error('Не удалось определить пользователя')
   }
 
-  const listingId = await persistListing(authorId, payload)
+  const listingId = await createListing({ authorId, payload })
   const matches = await findPotentialMatches({
     id: listingId,
     ...payload
@@ -4175,41 +4185,6 @@ function normalizeCoordinate(value) {
     return null
   }
   return num
-}
-
-async function persistListing(authorId, payload) {
-  const id = crypto.randomUUID()
-
-  await pool.query(
-    'INSERT INTO listings (id, author_id, type, category, title, description, lat, lng, occurred_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    [
-      id,
-      authorId,
-      payload.type,
-      payload.category,
-      payload.title,
-      payload.description,
-      payload.lat,
-      payload.lng,
-      payload.occurredAt
-    ]
-  )
-
-  for (const url of payload.photos) {
-    await pool.query(
-      'INSERT INTO photos (id, listing_id, url) VALUES (?,?,?)',
-      [crypto.randomUUID(), id, url]
-    )
-  }
-
-  for (const secret of payload.secrets) {
-    await pool.query(
-      'INSERT INTO secrets (id, listing_id, cipher) VALUES (?,?,?)',
-      [crypto.randomUUID(), id, JSON.stringify(secret)]
-    )
-  }
-
-  return id
 }
 
 async function findPotentialMatches(newListing) {
@@ -4663,48 +4638,6 @@ async function fetchListingForOwner(listingId, userId) {
   }
 
   return rows[0]
-}
-
-async function updateListingDescription(listingId, userId, description) {
-  if (!listingId || !userId) {
-    return false
-  }
-
-  const trimmed = description.trim()
-  const [result] = await pool.query(
-    'UPDATE listings SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [trimmed, listingId, userId]
-  )
-
-  return result.affectedRows > 0
-}
-
-async function toggleListingStatus(listingId, userId) {
-  if (!listingId || !userId) {
-    return null
-  }
-
-  const [rows] = await pool.query(
-    'SELECT status FROM listings WHERE id = ? AND author_id = ? LIMIT 1',
-    [listingId, userId]
-  )
-
-  if (rows.length === 0) {
-    return null
-  }
-
-  const current = rows[0].status
-  const nextStatus = current === 'ACTIVE' ? 'CLOSED' : 'ACTIVE'
-  const [result] = await pool.query(
-    'UPDATE listings SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [nextStatus, listingId, userId]
-  )
-
-  if (result.affectedRows === 0) {
-    return null
-  }
-
-  return nextStatus
 }
 
 function formatDateTime(value) {
@@ -5254,83 +5187,5 @@ async function ensureEditableListing(ctx, runtime) {
   }
 
   return listing
-}
-
-async function updateListingTitle(listingId, userId, title) {
-  if (!listingId || !userId) {
-    return false
-  }
-  const trimmed = title.trim()
-  if (!trimmed) {
-    return false
-  }
-  const [result] = await pool.query(
-    'UPDATE listings SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [trimmed, listingId, userId]
-  )
-  return result.affectedRows > 0
-}
-
-async function updateListingCategory(listingId, userId, categoryId) {
-  if (!listingId || !userId || !categoryId) {
-    return false
-  }
-  const normalized = normalizeCategoryId(categoryId)
-  const option = CATEGORY_OPTIONS.find(option => option.id === normalized)
-  if (!option) {
-    return false
-  }
-  const [result] = await pool.query(
-    'UPDATE listings SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [normalized, listingId, userId]
-  )
-  return result.affectedRows > 0
-}
-
-async function updateListingOccurredAt(listingId, userId, date) {
-  if (!listingId || !userId) {
-    return false
-  }
-  const value = date ? formatMysqlDatetime(date) : null
-  const [result] = await pool.query(
-    'UPDATE listings SET occurred_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [value, listingId, userId]
-  )
-  return result.affectedRows > 0
-}
-
-async function updateListingLocation(listingId, userId, lat, lng) {
-  if (!listingId || !userId) {
-    return false
-  }
-  const latitude = Number.isFinite(Number(lat)) ? Number(lat) : null
-  const longitude = Number.isFinite(Number(lng)) ? Number(lng) : null
-  const [result] = await pool.query(
-    'UPDATE listings SET lat = ?, lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND author_id = ? LIMIT 1',
-    [latitude, longitude, listingId, userId]
-  )
-  return result.affectedRows > 0
-}
-
-async function replaceListingPhotos(listingId, userId, photoUrls) {
-  if (!listingId || !userId || !Array.isArray(photoUrls)) {
-    return false
-  }
-  const [ownerRows] = await pool.query(
-    'SELECT 1 FROM listings WHERE id = ? AND author_id = ? LIMIT 1',
-    [listingId, userId]
-  )
-  if (ownerRows.length === 0) {
-    return false
-  }
-
-  await pool.query('DELETE FROM photos WHERE listing_id = ?', [listingId])
-
-  for (const url of photoUrls.slice(0, 3)) {
-    await pool.query('INSERT INTO photos (id, listing_id, url) VALUES (?,?,?)', [crypto.randomUUID(), listingId, url])
-  }
-
-  await pool.query('UPDATE listings SET updated_at = CURRENT_TIMESTAMP WHERE id = ? LIMIT 1', [listingId])
-  return true
 }
 

@@ -31,19 +31,23 @@ export async function createNotification({
   payload = {},
   chatId = null,
   listingId = null
-}) {
+}, { database = pool } = {}) {
   if (!userId || !type) {
     throw new Error('userId and type are required to create notification')
   }
 
   const id = crypto.randomUUID()
-  await pool.query(
+  await database.query(
     `INSERT INTO notifications (id, user_id, chat_id, listing_id, type, title, body, payload, status)
      VALUES (?,?,?,?,?,?,?,?,?)`,
     [id, userId, chatId, listingId, type, title ?? null, body ?? null, JSON.stringify(payload ?? {}), status]
   )
 
   return id
+}
+
+export async function insertNotification(connection, data) {
+  return createNotification(data, { database: connection })
 }
 
 export async function upsertNotification(criteria, data) {
@@ -117,16 +121,17 @@ export async function updateNotification(id, patch = {}) {
   )
 }
 
-export async function markNotificationRead(id) {
-  if (!id) return
-  await pool.query(
+export async function markNotificationRead(id, userId) {
+  if (!id) return false
+  const [result] = await pool.query(
     `UPDATE notifications
      SET status = CASE WHEN status = 'ARCHIVED' THEN status ELSE 'READ' END,
          read_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [id]
+     WHERE id = ? ${userId ? 'AND user_id = ?' : ''}`,
+    userId ? [id, userId] : [id]
   )
+  return result.affectedRows > 0
 }
 
 export async function archiveNotification(id) {
@@ -163,7 +168,9 @@ export async function listNotifications(userId, { limit = 10, includeArchived = 
 function mapNotificationRow(row) {
   let payload = {}
   try {
-    payload = row?.payload ? JSON.parse(row.payload) : {}
+    payload = typeof row?.payload === 'string'
+      ? JSON.parse(row.payload)
+      : (row?.payload ?? {})
   } catch (error) {
     payload = {}
   }

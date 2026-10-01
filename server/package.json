@@ -6,6 +6,8 @@
   "scripts": {
     "migrate": "node src/migrate.js",
     "seed": "node src/seed.js",
+    "smoke:local": "node scripts/smoke-local.js",
+    "test": "node --test",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js"
   },
@@ -14,7 +16,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@maxhub/max-bot-api": "^0.2.1",
+    "@aws-sdk/client-s3": "^3.1109.0",
+    "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",

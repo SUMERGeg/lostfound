@@ -1,209 +1,105 @@
-# Lost&Found MAX
+# Lost&Found
 
-Проект разрабатывается командой для хакатона VK Education в экосистеме MAX. Цель — построить безопасный сервис поиска потерянных и найденных вещей с единой базой объявлений, автоматическим матчингом, картой и мини-приложением, которое удобно открывать прямо из бота.
+Standalone web-сервис для поиска потерянных и найденных вещей. React-клиент и собственный Express REST API работают напрямую по web URL, без MAX Mini App, Bot API и SDK мессенджера в production runtime.
 
-MiniApp + Node.js API для хакатона MAX: помогает соединять людей, потерявших вещи, с теми, кто их нашёл. В репозитории сразу лежит фронтенд (React/Vite), бэкенд (Express + MySQL), скрипты миграций/сидов, конфиги Docker и long polling бот для MAX.
+## Возможности
 
----
+- регистрация, вход, rotating HttpOnly refresh sessions, подтверждение email и восстановление пароля;
+- LOST/FOUND объявления, карта, фильтры, ручной выбор координат и безопасная загрузка до трёх фотографий;
+- версионированный matching с разложением score и пользовательским feedback;
+- owner-check с закрытыми ответами и раскрытием контактов только после подтверждения;
+- внутренние уведомления и transactional email outbox;
+- жалобы, ADMIN RBAC, скрытие/удаление объявлений, блокировка пользователей и audit log;
+- OpenAPI, forward-only migrations, health/readiness endpoints и production Docker images.
 
-## ⚙️ Стек
+Legacy MAX/FSM/volunteer файлы пока сохранены для анализа исторических данных, но не импортируются composition root, не доступны через HTTP и не входят в production dependencies.
 
-| Слой         | Технологии |
-|--------------|------------|
-| MiniApp      | React 18 / Vite, MAX UI (`@maxhub/max-ui`), React Router, Yandex Maps JS API 2.1, fetch |
-| Backend      | Node.js 20, Express 5, mysql2/promise, dotenv, node-cron, `@maxhub/max-bot-api` (long polling) |
-| БД/Инфра     | MySQL 8 (Docker, порт 3307), Docker/Docker Compose, ngrok (для вебхуков) |
+## Стек
 
-📄 Полный список зависимостей и версий: `requirements.txt`.
+| Слой | Технологии |
+|---|---|
+| Frontend | React 18, Vite, React Router, Yandex Maps JS API 2.1 |
+| Backend | Node.js 20, Express 5, MySQL 8, mysql2, node-cron |
+| Storage/email | S3-compatible Object Storage, HTTP transactional email provider |
+| Deployment | Multi-stage Docker, nginx SPA/reverse proxy |
 
----
+## Локальный запуск
 
-## 📁 Структура репозитория
+1. Создайте локальные env-файлы, которые игнорируются Git:
 
-```
-lostfound/
-├── client/                 # React/Vite MiniApp
-│   ├── src/
-│   │   ├── pages/          # Home (лента), Map, Listing
-│   │   ├── components/     # Filters и др.
-│   │   ├── styles/         # global.css (MAX UI + кастом)
-│   │   └── utils/          # categories, maxBridge заглушка
-│   ├── public/
-│   │   └── sample/         # mock-фото для ленты
-│   └── Dockerfile
-│
-├── server/                 # Express API + MAX Bot
-│   ├── src/
-│   │   ├── index.js        # точка входа, /health, /listings, /webhook
-│   │   ├── listings.js     # CRUD и фильтры
-│   │   ├── matching.js     # скоринг найдено/потеряно
-│   │   ├── cron.js         # пересчёт совпадений раз в 10 мин
-│   │   ├── db.js           # mysql2 pool
-│   │   ├── migrate.js      # создание таблиц
-│   │   ├── seed.js         # 4 тестовых объявлений (Москва)
-│   │   ├── max.js          # заглушки обработки событий MAX
-│   │   ├── polling.js      # long polling `/updates`
-│   │   └── notifications.js# отправка системных пушей (заготовка)
-│   ├── .env.example / Dockerfile
-│
-├── docker-compose.yml      # mysql + server + client
-├── requirements.txt        # список библиотек и версий
-└── README.md
+```powershell
+Copy-Item server/.env.example server/.env
+Copy-Item client/.env.example client/.env
 ```
 
----
+2. Укажите как минимум независимые `JWT_ACCESS_SECRET` и `EMAIL_TOKEN_SECRET` длиной от 32 байт. Для загрузок нужны параметры test bucket; реальные credentials не коммитятся.
 
-## 🧰 Предварительные условия
-
-1. **Node.js 20** (https://nodejs.org/en/download)
-2. **npm 10** (идёт в комплекте)
-3. **Docker Desktop** + `docker compose`
-4. **Яндекс-карты API key** (https://developer.tech.yandex.ru/services/)
-5. **MAX Bot token** (из консоли MAX)
-
----
-
-## 🔑 Переменные окружения
-
-`server/.env` (см. `.env.example`):
-```
-PORT=8080
-NODE_ENV=development
-
-FRONT_ORIGIN=http://localhost:5173
-MAX_BOT_TOKEN=f9LHodD0cOJbLteSGAgksy33Rje4M6dwlQVI5qXVCz_qU5XEgVXu8FiVRjEGzMq4NiVa-0wgbnE8g_-r-Hx5
-MAX_API_BASE=https://platform-api.max.ru
-# MySQL (если используете Docker)
-DB_HOST=mysql
-DB_PORT=3306
-DB_USER=dev
-DB_PASSWORD=dev
-DB_NAME=lostfound
-
-SECRETS_KEY=any-random-32-byte-hex-string
-```
-
-`client/.env` (см. `.env.example`):
-```
-VITE_API_BASE=http://localhost:8080
-```
-
----
-
-## 🚀 Запуск локально (без Docker)
-
-### 1. Поднять MySQL
+3. Запустите dev-окружение:
 
 ```powershell
 docker compose up -d mysql
-# DB доступна на 127.0.0.1:3307 (user dev/dev)
-```
-
-### 2. Настроить сервер
-
-```powershell
 cd server
-cp .env.example .env    # заполнить токены и доступ к БД
-меняем переменные БД на HOST=127.0.0.1; PORT=3307
-npm install
-npm run migrate         # создаёт таблицы
-npm run seed            # наполняет 4 демо-объявления
-npm run dev             # старт Express API + cron + polling
+npm ci
+npm run migrate
+npm run seed
+npm run dev
 ```
 
-API появится на `http://localhost:8080`. Проверка:
-
-```powershell
-curl http://localhost:8080/health     # {"ok":true}
-curl "http://localhost:8080/listings?limit=2"
-```
-
-### 3. Настроить клиент
+В другом терминале:
 
 ```powershell
 cd client
-npm install
-npm run dev    # Vite поднимет MiniApp на http://localhost:5173
+npm ci
+npm run dev
 ```
 
-MiniApp сразу подтягивает данные из API и карту Яндекс.
+Клиент: `http://localhost:5173`; API: `http://localhost:8080`; readiness: `http://localhost:8080/health/ready`.
 
----
-
-## 🐳 Запуск через Docker
-
-> Убедитесь, что `server/.env` содержит настройки для подключения к контейнеру MySQL: `DB_HOST=mysql`, `DB_PORT=3306`.
+## Проверка
 
 ```powershell
-cd "ВАШ ПУТЬ К ПРОЕКТУ"   # корень репозитория
-docker compose build                      # собираем client/server
-docker compose up -d                      # поднимаем mysql, server, client
+cd server
+npm test
 
-# Прогоняем миграцию и сид внутри контейнера server
-docker compose exec server npm run migrate
-docker compose exec server npm run seed
+cd ../client
+npm run lint
+npm run build
 ```
 
-Порты:
+Актуальный контракт API находится в [`openapi.yaml`](openapi.yaml), архитектурный аудит и последовательность миграции — в [`docs/web-migration`](docs/web-migration).
 
-| Сервис | Порт хоста | Описание |
-|--------|------------|----------|
-| MySQL  | 3307       | dev/dev |
-| API    | 8080       | Express |
-| MiniApp| 5173       | Vite dev server |
+## Demo and local smoke
 
-Проверка:
+After `npm run seed`, three verified demo accounts are available. They all use the password `DemoPassword!2026`:
+
+- `anton@example.test` — LOST listing owner and matching recipient;
+- `irina@example.test` — FOUND listing holder and owner-check reviewer;
+- `admin@example.test` — administrator with moderation access.
+
+The seed command also creates the demo matching pair. With the API running, verify readiness, the public feed, authentication, matching and administrator RBAC:
 
 ```powershell
-curl http://localhost:8080/health
-curl http://localhost:5173/
+cd server
+npm run smoke:local
 ```
 
-Остановка/перезапуск:
+## Production image
+
+`docker-compose.prod.yml` собирает production targets: Node API запускает migrations перед стартом, а nginx раздаёт собранную SPA и проксирует `/api` на backend.
 
 ```powershell
-docker compose down        # остановить и удалить контейнеры
-docker compose logs -f     # посмотреть логи
-docker compose restart     # перезапустить все контейнеры
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
 ```
 
----
-
-## 🤖 MAX Bot
-
-Для локальных тестов используется **long polling** (`server/src/polling.js`). Он стартует автоматически вместе с `npm run dev`. Бот обрабатывает команды:
-   - `/start` — приветствие + кнопка «Открыть карту»
-   - `/stats` — количество активных объявлений в БД
-
-
----
-
-## 🧩 Основные консольные команды
-
-| Команда | Описание |
-|---------|----------|
-| `npm run migrate` (server) | создаёт все таблицы |
-| `npm run seed` (server)    | наполняет тестовыми данными |
-| `npm run dev` (server)     | Express + cron + polling |
-| `npm run dev` (client)     | Vite dev server |
-| `docker compose build`     | сборка образов |
-| `docker compose up -d`     | запуск mysql/server/client |
-| `docker compose down`      | остановка |
-| `docker compose logs -f server` | просмотр логов API |
-
----
-
-## 🔍 Быстрая проверка из командной строки
+Перед staging можно прогнать полностью изолированную локальную production-репетицию с production Docker targets, отдельной MySQL, API/privacy smoke и backup/restore drill:
 
 ```powershell
-cd lostfound
-docker compose build
-docker compose up -d
-docker compose exec server npm run migrate
-docker compose exec server npm run seed
-curl http://localhost:8080/health
-curl "http://localhost:8080/listings?limit=1"
-start http://localhost:5173/
+.\scripts\production-rehearsal.ps1
 ```
 
----
+Результат доступен на `http://127.0.0.1:18080`. Подробности и команда остановки описаны в [`docs/web-migration/staging-runbook.md`](docs/web-migration/staging-runbook.md).
+
+Production использует внешнюю managed MySQL и S3-compatible Object Storage из `server/.env`. HTTPS/TLS должен завершаться на cloud load balancer или ingress перед портом nginx `8080`.
+
+Обязательные production env дополнительно включают `NODE_ENV=production`, `FRONT_ORIGIN`, email provider (`EMAIL_API_URL`, `EMAIL_API_TOKEN`, `EMAIL_FROM`) и Object Storage credentials. Старые ключи, когда-либо попавшие в Git history, необходимо отозвать у провайдеров.

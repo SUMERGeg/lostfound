@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Button, Flex, Panel, Typography } from '@maxhub/max-ui'
+import { Button, Flex, Panel, Select, Typography } from './ui.jsx'
 import { CATEGORY_OPTIONS } from '../utils/categories.js'
 
 const initialFilters = { type: '', category: '' }
 
-export default function Filters({ value = initialFilters, onApply }) {
+export default function Filters({ value = initialFilters, onApply, context = 'feed' }) {
   const [filters, setFilters] = useState({ ...initialFilters, ...value })
+  const valueType = value.type
+  const valueCategory = value.category
 
   useEffect(() => {
-    setFilters(prev => ({ ...prev, ...value }))
-  }, [value.type, value.category])
+    setFilters(prev => ({ ...prev, type: valueType, category: valueCategory }))
+  }, [valueType, valueCategory])
 
   function handleChange(field, nextValue) {
     setFilters(current => ({ ...current, [field]: nextValue }))
@@ -25,32 +27,31 @@ export default function Filters({ value = initialFilters, onApply }) {
   }
 
   return (
-    <Panel mode="secondary" className="lf-filters">
+    <Panel mode="secondary" className={`lf-filters${context === 'map' ? ' lf-filters--map' : ''}`}>
       <Flex direction="column" gap={12}>
-        <Typography.Label variant="medium-strong">Подбор объявлений</Typography.Label>
+        <Typography.Label variant="medium-strong">{context === 'map' ? 'Фильтр точек на карте' : 'Подбор объявлений'}</Typography.Label>
         <Flex gap={12} wrap="wrap" className="lf-filters__row">
-          <label className="lf-select">
+          <div className="lf-select">
             <span>Тип</span>
-            <select value={filters.type} onChange={event => handleChange('type', event.target.value)}>
-              <option value="">Все</option>
-              <option value="LOST">Потеряно</option>
-              <option value="FOUND">Найдено</option>
-            </select>
-          </label>
-          <label className="lf-select">
+            <Select
+              ariaLabel="Тип объявления"
+              value={filters.type}
+              onChange={nextValue => handleChange('type', nextValue)}
+              options={[["", 'Все объявления'], ['LOST', 'Потеряно'], ['FOUND', 'Найдено']]}
+            />
+          </div>
+          <div className="lf-select">
             <span>Категория</span>
-            <select
+            <Select
+              ariaLabel="Категория объявления"
               value={filters.category}
-              onChange={event => handleChange('category', event.target.value)}
-            >
-              <option value="">Любая категория</option>
-              {CATEGORY_OPTIONS.map(option => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={nextValue => handleChange('category', nextValue)}
+              options={[
+                { value: '', label: 'Любая категория' },
+                ...CATEGORY_OPTIONS.map(option => ({ value: option.id, label: `${option.emoji} ${option.label}` }))
+              ]}
+            />
+          </div>
           <Flex direction="column" justify="end" className="lf-filters__actions-wrapper">
             <Flex gap={8} className="lf-filters__actions">
               <Button size="medium" mode="primary" appearance="themed" onClick={handleApply}>
