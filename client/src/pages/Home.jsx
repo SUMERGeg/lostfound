@@ -43,7 +43,7 @@ export default function HomePage() {
   }, [filters.type, filters.category])
 
   return (
-    <section className="lf-section">
+    <section id="demo-feed" className="lf-section">
       <header className="lf-feed-heading">
         <div>
           <p className="lf-eyebrow lf-eyebrow--dark"><span /> Рядом с вами</p>

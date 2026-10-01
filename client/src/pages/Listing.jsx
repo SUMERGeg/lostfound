@@ -4,6 +4,7 @@ import { Button, Flex, Grid, Panel, Typography } from '../components/ui.jsx'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 import { apiRequest } from '../api.js'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { isDemo } from '../demo.js'
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   day: '2-digit',
@@ -160,10 +161,10 @@ export default function ListingPage() {
 
             <Panel mode="secondary" className="lf-callout">
               <Typography.Body variant="medium">
-                Контактные данные откроются только после успешной проверки владельца.
+                {isDemo ? 'Это вымышленное объявление для демонстрации. Связаться с автором или отправить заявку здесь нельзя.' : 'Контактные данные откроются только после успешной проверки владельца.'}
               </Typography.Body>
-              {listing.type === 'FOUND' && <Button asChild size="medium"><Link to={`/ads/${listing.id}/claim`}>Это моя вещь</Link></Button>}
-              {user && <Button asChild size="medium" mode="secondary"><Link to={`/ads/${listing.id}/report`}>Пожаловаться</Link></Button>}
+              {!isDemo && listing.type === 'FOUND' && <Button asChild size="medium"><Link to={`/ads/${listing.id}/claim`}>Это моя вещь</Link></Button>}
+              {!isDemo && user && <Button asChild size="medium" mode="secondary"><Link to={`/ads/${listing.id}/report`}>Пожаловаться</Link></Button>}
             </Panel>
           </Flex>
         </Panel>

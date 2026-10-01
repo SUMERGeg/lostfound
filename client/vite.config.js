@@ -24,6 +24,9 @@ export default defineConfig(({ mode }) => {
       {
         name: 'inject-yandex-maps-key',
         transformIndexHtml(html) {
+          if (mode === 'demo' || env.VITE_DEMO_MODE === 'true') {
+            return html.replace(/\s*<script src="https:\/\/api-maps\.yandex\.ru\/[^"]+" defer><\/script>/, '')
+          }
           const query = yandexMapsApiKey
             ? `apikey=${encodeURIComponent(yandexMapsApiKey)}&`
             : ''

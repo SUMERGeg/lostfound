@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import AppLayout from './App.jsx'
 import HomePage from './pages/Home.jsx'
 import MapPage from './pages/Map.jsx'
@@ -20,6 +20,7 @@ import LegalPage from './pages/Legal.jsx'
 import PrivacyRequestPage from './pages/PrivacyRequest.jsx'
 import { LEGAL_DOCUMENTS } from './legal/documents.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
+import { isDemo } from './demo.js'
 import './styles/global.css'
 
 const rootElement = document.getElementById('root')
@@ -56,6 +57,7 @@ createRoot(rootElement).render(
             <Route path="terms" element={<LegalPage document={LEGAL_DOCUMENTS.terms} />} />
             <Route path="personal-data-consent" element={<LegalPage document={LEGAL_DOCUMENTS.personalDataConsent} />} />
             <Route path="publication-rules" element={<LegalPage document={LEGAL_DOCUMENTS.publicationRules} />} />
+            {isDemo && <Route path="*" element={<Navigate to="/ads" replace />} />}
           </Route>
         </Routes>
       </BrowserRouter>

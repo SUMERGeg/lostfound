@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { LEGAL_DOCUMENT_LIST } from '../legal/documents.js'
 import { isPrivacyEmailConfigured, replacePrivacyEmail, usePrivacyEmail } from '../privacyConfig.js'
+import { isDemo } from '../demo.js'
 
 function PlaceholderNotice() {
   return (
@@ -49,8 +50,8 @@ export default function LegalPage({ document }) {
         </div>
 
         <footer className="lf-legal__document-footer">
-          <p>Вопросы по документу:{' '}{isPrivacyEmailConfigured(privacyEmail) ? <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a> : <strong>{privacyEmail}</strong>}</p>
-          <div><Link to="/privacy-request">Запрос по персональным данным →</Link><Link to="/ads">Вернуться к объявлениям →</Link></div>
+          {isDemo ? <p>Демонстрационный макет документа. Приём обращений отключён.</p> : <p>Вопросы по документу:{' '}{isPrivacyEmailConfigured(privacyEmail) ? <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a> : <strong>{privacyEmail}</strong>}</p>}
+          <div>{!isDemo && <Link to="/privacy-request">Запрос по персональным данным →</Link>}<Link to="/ads">Вернуться к объявлениям →</Link></div>
         </footer>
       </article>
     </div>

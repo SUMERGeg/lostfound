@@ -3,6 +3,8 @@ import { Panel, Typography } from '../components/ui.jsx'
 import { useOutletContext } from 'react-router-dom'
 import { getCategoryMeta, TYPE_META } from '../utils/categories.js'
 import { apiRequest } from '../api.js'
+import { isDemo } from '../demo.js'
+import DemoMap from '../components/DemoMap.jsx'
 
 const initialFilters = { type: '', category: '' }
 
@@ -16,6 +18,10 @@ function escapeHtml(input = '') {
 }
 
 export default function MapPage() {
+  return isDemo ? <DemoMap /> : <LiveMapPage />
+}
+
+function LiveMapPage() {
   const mapRef = useRef(null)
   const clustererRef = useRef(null)
   const markerLayoutRef = useRef(null)

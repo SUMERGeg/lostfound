@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Container } from './components/ui.jsx'
 import Filters from './components/Filters.jsx'
 import { useAuth } from './auth/AuthContext.jsx'
 import { isPrivacyEmailConfigured, usePrivacyEmail } from './privacyConfig.js'
+import { isDemo, isDemoPath } from './demo.js'
 
 const initialFilters = { type: '', category: '' }
 
@@ -30,6 +31,8 @@ export default function AppLayout() {
   const isMap = location.pathname.startsWith('/map')
   const isDiscovery = isFeed || isMap
 
+  if (isDemo && !isDemoPath(location.pathname)) return <Navigate to="/ads" replace />
+
   function isActive(path) {
     if (path === '/ads') return location.pathname === '/' || location.pathname.startsWith('/ads')
     return location.pathname.startsWith(path)
@@ -41,6 +44,7 @@ export default function AppLayout() {
 
   return (
     <div className="lf-shell">
+      {isDemo && <aside className="lf-demo-banner" role="note">Демонстрационная версия · вымышленные объявления · публикация и регистрация отключены</aside>}
       <header className={`lf-header${isMap ? ' lf-header--map' : ''}${!isDiscovery ? ' lf-header--compact' : ''}`}>
         <Container className="lf-header__container">
           <div className="lf-topbar">
@@ -52,7 +56,7 @@ export default function AppLayout() {
             </nav>
 
             <nav className="lf-account-nav" aria-label="Личный кабинет">
-              {user ? (
+              {isDemo ? <span className="lf-demo-badge">Только просмотр</span> : user ? (
                 <>
                   <Link className={isActive('/matches') ? 'is-active' : ''} to="/matches">Совпадения</Link>
                   <Link className={isActive('/owner-checks') ? 'is-active' : ''} to="/owner-checks">Проверки</Link>
@@ -73,14 +77,14 @@ export default function AppLayout() {
                 <p className="lf-eyebrow"><span /> Городской сервис взаимопомощи</p>
                 <h1>Потерялось?<br /><em>Найдётся.</em></h1>
                 <p className="lf-hero__subtitle">
-                  Люди рядом уже помогают друг другу возвращать важные вещи. Создайте объявление — умный поиск подберёт возможные совпадения.
+                  {isDemo ? 'Посмотрите, как люди смогут находить потерянное и возвращать важное. Изучите примеры объявлений и точки на демонстрационной схеме города.' : 'Люди рядом уже помогают друг другу возвращать важные вещи. Создайте объявление — умный поиск подберёт возможные совпадения.'}
                 </p>
                 <div className="lf-hero__actions">
-                  <Link className="lf-action lf-action--lost" to="/create/lost">
-                    <span aria-hidden="true">↗</span> Я потерял
+                  <Link className="lf-action lf-action--lost" to={isDemo ? '#demo-feed' : '/create/lost'} reloadDocument={isDemo}>
+                    <span aria-hidden="true">↗</span> {isDemo ? 'Смотреть объявления' : 'Я потерял'}
                   </Link>
-                  <Link className="lf-action lf-action--found" to="/create/found">
-                    <span aria-hidden="true">＋</span> Я нашёл
+                  <Link className="lf-action lf-action--found" to={isDemo ? '/map' : '/create/found'}>
+                    <span aria-hidden="true">{isDemo ? '⌖' : '＋'}</span> {isDemo ? 'На карту' : 'Я нашёл'}
                   </Link>
                 </div>
               </div>
@@ -106,7 +110,7 @@ export default function AppLayout() {
               <div className="lf-map-hero__copy">
                 <p className="lf-eyebrow"><span /> Поиск рядом с вами</p>
                 <h1>Город.<br /><em>Точки. Находки.</em></h1>
-                <p>Исследуйте объявления по районам: зелёные точки — найденные вещи, красные — потерянные.</p>
+                <p>{isDemo ? 'Исследуйте примеры на условной схеме Москвы: зелёные точки — найденные вещи, красные — потерянные.' : 'Исследуйте объявления по районам: зелёные точки — найденные вещи, красные — потерянные.'}</p>
                 <div className="lf-map-hero__legend" aria-label="Легенда карты">
                   <span><i className="is-lost" /> Потеряно</span>
                   <span><i className="is-found" /> Найдено</span>
@@ -145,15 +149,17 @@ export default function AppLayout() {
           <nav className="lf-footer__links" aria-label="Документы сервиса">
             <strong>Документы</strong>
             <Link to="/privacy">Конфиденциальность</Link>
-            <Link to="/privacy-request">Запрос по персональным данным</Link>
+            {!isDemo && <Link to="/privacy-request">Запрос по персональным данным</Link>}
             <Link to="/terms">Соглашение</Link>
             <Link to="/personal-data-consent">Согласие на обработку данных</Link>
             <Link to="/publication-rules">Правила публикации</Link>
           </nav>
           <div className="lf-footer__meta">
             <span>© {new Date().getFullYear()} Lost&amp;Found</span>
-            {isPrivacyEmailConfigured(privacyEmail) ? <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a> : <small>{privacyEmail}</small>}
-            <small>Оператор: [OPERATOR_NAME]</small>
+            {isDemo ? <small>Витрина проекта · без приёма заявок</small> : <>
+              {isPrivacyEmailConfigured(privacyEmail) ? <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a> : <small>{privacyEmail}</small>}
+              <small>Оператор: [OPERATOR_NAME]</small>
+            </>}
           </div>
         </Container>
       </footer>

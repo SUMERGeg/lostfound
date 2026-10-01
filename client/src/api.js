@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+import { demoRequest, isDemo } from './demo.js'
+
+const API_BASE = import.meta.env?.VITE_API_BASE ?? ''
 
 let accessToken = null
 let refreshPromise = null
@@ -16,6 +18,7 @@ export async function apiRequest(path, options = {}) {
 }
 
 export async function refreshAccessToken() {
+  if (isDemo) return null
   if (!refreshPromise) {
     refreshPromise = send('/api/v1/auth/refresh', { method: 'POST', skipRefresh: true })
       .then(async response => {
@@ -33,6 +36,7 @@ export async function refreshAccessToken() {
 }
 
 async function send(path, options) {
+  if (isDemo) return demoRequest(path, options)
   const headers = new Headers(options.headers)
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
