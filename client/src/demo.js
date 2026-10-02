@@ -1,5 +1,7 @@
-// Vercel uses the demo build. Normal development / production builds keep the real API.
-export const isDemo = import.meta.env?.MODE === 'demo' || import.meta.env?.VITE_DEMO_MODE === 'true'
+import { assetUrl, deployment } from './deployment.js'
+
+// Static hosts use demo builds. Ordinary builds keep the real API.
+export const isDemo = deployment.isDemo
 
 export const demoListings = [
   {
@@ -48,7 +50,10 @@ export const demoListings = [
     occurred_at: '2026-09-29T23:00:00+03:00', created_at: '2026-09-30T08:30:00+03:00',
     photos: ['/sample/wear-backpack.png'], mapPosition: [37, 70]
   }
-].map(item => Object.freeze({ ...item, status: 'ACTIVE', preview_photo: item.photos[0], photos: Object.freeze(item.photos), mapPosition: Object.freeze(item.mapPosition) }))
+].map(item => {
+  const photos = Object.freeze(item.photos.map(photo => assetUrl(photo)))
+  return Object.freeze({ ...item, status: 'ACTIVE', preview_photo: photos[0], photos, mapPosition: Object.freeze(item.mapPosition) })
+})
 Object.freeze(demoListings)
 
 export function getDemoListings({ type = '', category = '' } = {}) {

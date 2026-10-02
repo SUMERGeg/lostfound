@@ -80,9 +80,15 @@ export default function AppLayout() {
                   {isDemo ? 'Посмотрите, как люди смогут находить потерянное и возвращать важное. Изучите примеры объявлений и точки на демонстрационной схеме города.' : 'Люди рядом уже помогают друг другу возвращать важные вещи. Создайте объявление — умный поиск подберёт возможные совпадения.'}
                 </p>
                 <div className="lf-hero__actions">
-                  <Link className="lf-action lf-action--lost" to={isDemo ? '#demo-feed' : '/create/lost'} reloadDocument={isDemo}>
-                    <span aria-hidden="true">↗</span> {isDemo ? 'Смотреть объявления' : 'Я потерял'}
-                  </Link>
+                  {isDemo ? (
+                    <button className="lf-action lf-action--lost" type="button" onClick={() => document.getElementById('demo-feed')?.scrollIntoView({ behavior: 'smooth' })}>
+                      <span aria-hidden="true">↗</span> Смотреть объявления
+                    </button>
+                  ) : (
+                    <Link className="lf-action lf-action--lost" to="/create/lost">
+                      <span aria-hidden="true">↗</span> Я потерял
+                    </Link>
+                  )}
                   <Link className="lf-action lf-action--found" to={isDemo ? '/map' : '/create/found'}>
                     <span aria-hidden="true">{isDemo ? '⌖' : '＋'}</span> {isDemo ? 'На карту' : 'Я нашёл'}
                   </Link>

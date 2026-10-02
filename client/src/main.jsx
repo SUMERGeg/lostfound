@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Routes, Route } from 'react-router-dom'
 import AppLayout from './App.jsx'
 import HomePage from './pages/Home.jsx'
 import MapPage from './pages/Map.jsx'
@@ -21,14 +21,16 @@ import PrivacyRequestPage from './pages/PrivacyRequest.jsx'
 import { LEGAL_DOCUMENTS } from './legal/documents.js'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import { isDemo } from './demo.js'
+import { deployment } from './deployment.js'
 import './styles/global.css'
 
 const rootElement = document.getElementById('root')
+const SiteRouter = deployment.useHashRouter ? HashRouter : BrowserRouter
 
 createRoot(rootElement).render(
   <StrictMode>
     <AuthProvider>
-      <BrowserRouter>
+      <SiteRouter>
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<HomePage />} />
@@ -60,7 +62,7 @@ createRoot(rootElement).render(
             {isDemo && <Route path="*" element={<Navigate to="/ads" replace />} />}
           </Route>
         </Routes>
-      </BrowserRouter>
+      </SiteRouter>
     </AuthProvider>
   </StrictMode>,
 )

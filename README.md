@@ -31,6 +31,8 @@ Legacy MAX/FSM/volunteer файлы пока сохранены для анал�
 
 Пошаговая инструкция: [Vercel demo](docs/web-migration/vercel-demo.md). Обычные команды `dev` и `build` сохраняют полноценный режим сервиса.
 
+GitHub Pages: [демовитрина](https://SUMERGeg.github.io/lostfound/) и [инструкция](docs/web-migration/github-pages-demo.md). Сборка `npm run build:pages`; изменения в `main` публикуются автоматически через GitHub Actions.
+
 ### Полноценный сервис
 
 1. Создайте локальные env-файлы, которые игнорируются Git:

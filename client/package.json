@@ -8,6 +8,7 @@
     "dev:demo": "vite --mode demo",
     "build": "vite build",
     "build:demo": "vite build --mode demo",
+    "build:pages": "vite build --mode pages",
     "test": "node --test --test-reporter=spec",
     "lint": "eslint .",
     "preview": "vite preview"
