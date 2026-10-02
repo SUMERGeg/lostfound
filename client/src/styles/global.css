@@ -135,6 +135,7 @@ h1, h2, h3, p { margin-top: 0; }
 .lf-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .lf-action { min-height: 54px; padding: 0 22px; display: inline-flex; align-items: center; gap: 11px; border-radius: 15px; font-weight: 800; transition: transform .2s ease, box-shadow .2s ease; }
 .lf-action:hover { transform: translateY(-3px); }
+button.lf-action { border: 0; cursor: pointer; }
 .lf-action span { font-size: 22px; }
 .lf-action--lost { background: var(--mint); color: var(--forest-deep); box-shadow: 0 14px 34px rgba(186,243,74,.18); }
 .lf-action--found { color: white; border: 1px solid rgba(255,255,255,.23); background: rgba(255,255,255,.08); }
